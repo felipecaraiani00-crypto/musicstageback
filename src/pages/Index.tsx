@@ -454,8 +454,25 @@ export default function Index() {
 
   if (!currentSong) {
     return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
+      <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Music className="w-12 h-12 text-muted-foreground/50" />
+        <p className="text-muted-foreground">Nenhuma música importada</p>
+        <button 
+          onClick={() => setShowImport(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium"
+        >
+          <Music className="w-4 h-4" />
+          Importar Músicas
+        </button>
+        
+        {showImport && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+            <ImportMusic
+              onClose={() => setShowImport(false)}
+              onImport={handleImportSongs}
+            />
+          </div>
+        )}
       </div>
     );
   }
