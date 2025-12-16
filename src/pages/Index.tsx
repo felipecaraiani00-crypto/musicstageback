@@ -82,6 +82,7 @@ export default function Index() {
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     handleTrackSoloToggle,
+    setStereoSplit,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     play: enginePlay,
@@ -91,6 +92,14 @@ export default function Index() {
     seek: engineSeek,
     skip: engineSkip,
   } = useAudioEngine();
+  
+  // Stereo split state
+  const [stereoSplit, setStereoSplitState] = useState(0); // -1 = click left, 0 = center, 1 = click right
+  
+  const handleStereoSplitChange = useCallback((side: number) => {
+    setStereoSplitState(side);
+    setStereoSplit(side);
+  }, [setStereoSplit]);
   
   // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
@@ -476,9 +485,11 @@ export default function Index() {
           isFadeRestoring={isFadeRestoring}
           fadeProgress={fadeProgress}
           voiceEnabled={voiceAnnouncementsEnabled}
+          stereoSplit={stereoSplit}
           onMasterVolumeChange={setMasterVolume}
           onFadeToClickToggle={handleFadeToClickToggle}
           onVoiceToggle={() => setVoiceAnnouncementsEnabled(prev => !prev)}
+          onStereoSplitChange={handleStereoSplitChange}
         />
 
         <TransportControls

@@ -113,9 +113,11 @@ export async function importZipFile(
         trackName,
         audioBuffer,
         volume: 1.0,
+        pan: 0, // Center by default
         isMuted: false,
         isSolo: false,
         gainNode: null,
+        panNode: null,
         sourceNode: null,
       };
 
