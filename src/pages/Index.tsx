@@ -2,17 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { Settings, Music, List } from "lucide-react";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
-import { TrackMixer, Track } from "@/components/TrackMixer";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
+import { FaderTrack } from "@/components/HorizontalFaders";
 
-const initialTracks: Track[] = [
-  { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80, isMuted: false, isSolo: false, level: 0 },
-  { id: "2", name: "Drums", icon: "🪘", color: "hsl(0, 72%, 55%)", volume: 85, isMuted: false, isSolo: false, level: 0 },
-  { id: "3", name: "Bass", icon: "🎸", color: "hsl(280, 70%, 55%)", volume: 75, isMuted: false, isSolo: false, level: 0 },
-  { id: "4", name: "Keys", icon: "🎹", color: "hsl(200, 70%, 45%)", volume: 70, isMuted: false, isSolo: false, level: 0 },
-  { id: "5", name: "Guitar", icon: "🎵", color: "hsl(145, 70%, 45%)", volume: 65, isMuted: false, isSolo: false, level: 0 },
-  { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90, isMuted: false, isSolo: false, level: 0 },
+const initialTracks: FaderTrack[] = [
+  { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
+  { id: "2", name: "Drums", icon: "🪘", color: "hsl(0, 72%, 55%)", volume: 85 },
+  { id: "3", name: "Bass", icon: "🎸", color: "hsl(280, 70%, 55%)", volume: 75 },
+  { id: "4", name: "Keys", icon: "🎹", color: "hsl(200, 70%, 45%)", volume: 70 },
+  { id: "5", name: "Guitar", icon: "🎵", color: "hsl(145, 70%, 45%)", volume: 65 },
+  { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
 const TOTAL_DURATION = 192; // seconds
@@ -22,7 +22,7 @@ const BEATS_PER_BAR = 4;
 export default function Index() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [tracks, setTracks] = useState<Track[]>(initialTracks);
+  const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
@@ -57,26 +57,6 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Simulate level meters
-  useEffect(() => {
-    if (!isPlaying) {
-      setTracks((prev) => prev.map((t) => ({ ...t, level: 0 })));
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setTracks((prev) =>
-        prev.map((track) => ({
-          ...track,
-          level: track.isMuted
-            ? 0
-            : Math.min(100, Math.max(20, track.volume * 0.8 + Math.random() * 40 - 20)),
-        }))
-      );
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isPlaying]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying((prev) => !prev);
@@ -106,26 +86,6 @@ export default function Index() {
     );
   }, []);
 
-  const handleMuteToggle = useCallback((trackId: string) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === trackId ? { ...t, isMuted: !t.isMuted } : t))
-    );
-  }, []);
-
-  const handleSoloToggle = useCallback((trackId: string) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === trackId ? { ...t, isSolo: !t.isSolo } : t))
-    );
-  }, []);
-
-  // Convert tracks for faders view
-  const faderTracks = tracks.map((t) => ({
-    id: t.id,
-    name: t.name,
-    icon: t.icon,
-    color: t.color,
-    volume: t.volume,
-  }));
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -153,23 +113,15 @@ export default function Index() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 space-y-4 overflow-y-auto min-h-0">
+      <main className="flex-1 p-4 overflow-y-auto min-h-0">
         {/* Song Viewer (Waveform / Faders toggle) */}
         <SongViewer
           currentTime={currentTime}
           totalDuration={TOTAL_DURATION}
           isPlaying={isPlaying}
           onSeek={handleSeek}
-          tracks={faderTracks}
-          onVolumeChange={handleVolumeChange}
-        />
-
-        {/* Track Mixer */}
-        <TrackMixer
           tracks={tracks}
           onVolumeChange={handleVolumeChange}
-          onMuteToggle={handleMuteToggle}
-          onSoloToggle={handleSoloToggle}
         />
       </main>
 
