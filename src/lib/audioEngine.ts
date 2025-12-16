@@ -6,6 +6,7 @@ export interface Track {
   audioBuffer: AudioBuffer | null;
   volume: number; // 0.0 to 1.0
   isMuted: boolean;
+  isSolo: boolean;
   gainNode: GainNode | null;
   sourceNode: AudioBufferSourceNode | null;
 }
@@ -364,6 +365,31 @@ class AudioEngine {
         return;
       }
     }
+  }
+
+  // Toggle track solo
+  toggleTrackSolo(trackId: string): boolean {
+    const song = this.getCurrentSong();
+    if (!song) return false;
+
+    const track = song.tracks.find(t => t.trackId === trackId);
+    if (!track) return false;
+
+    track.isSolo = !track.isSolo;
+
+    // Update all track gains based on solo state
+    const hasSoloActive = song.tracks.some(t => t.isSolo);
+
+    song.tracks.forEach(t => {
+      if (t.gainNode) {
+        const isEffectivelyMuted = t.isMuted || (hasSoloActive && !t.isSolo);
+        const targetVolume = isEffectivelyMuted ? 0 : t.volume;
+        t.gainNode.gain.setValueAtTime(targetVolume, this.audioContext?.currentTime || 0);
+      }
+    });
+
+    this.notifyListeners();
+    return track.isSolo;
   }
 
   // Set master volume
