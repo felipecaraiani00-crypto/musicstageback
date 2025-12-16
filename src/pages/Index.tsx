@@ -4,6 +4,7 @@ import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
+import { SongList, Song } from "@/components/SongList";
 import { FaderTrack } from "@/components/HorizontalFaders";
 
 const initialTracks: FaderTrack[] = [
@@ -15,8 +16,17 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-const TOTAL_DURATION = 192; // seconds
-const BPM = 120;
+const demoSongs: Song[] = [
+  { id: "1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
+  { id: "2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
+  { id: "3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
+  { id: "4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
+  { id: "5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
+  { id: "6", title: "Way Maker", artist: "Sinach", duration: 295, bpm: 68 },
+  { id: "7", title: "Goodness of God", artist: "Bethel Music", duration: 275, bpm: 63 },
+  { id: "8", title: "Build My Life", artist: "Housefires", duration: 258, bpm: 72 },
+];
+
 const BEATS_PER_BAR = 4;
 
 export default function Index() {
@@ -27,6 +37,7 @@ export default function Index() {
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
+  const [currentSong, setCurrentSong] = useState<Song>(demoSongs[0]);
 
   // Simulate playback
   useEffect(() => {
@@ -34,7 +45,7 @@ export default function Index() {
 
     const interval = setInterval(() => {
       setCurrentTime((prev) => {
-        if (prev >= TOTAL_DURATION) {
+        if (prev >= currentSong.duration) {
           setIsPlaying(false);
           return 0;
         }
@@ -43,20 +54,19 @@ export default function Index() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPlaying]);
+  }, [isPlaying, currentSong.duration]);
 
   // Simulate beat counter
   useEffect(() => {
     if (!isPlaying) return;
 
-    const beatDuration = 60 / BPM;
+    const beatDuration = 60 / currentSong.bpm;
     const interval = setInterval(() => {
       setCurrentBeat((prev) => (prev % BEATS_PER_BAR) + 1);
     }, beatDuration * 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying]);
-
+  }, [isPlaying, currentSong.bpm]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying((prev) => !prev);
@@ -73,8 +83,8 @@ export default function Index() {
   }, []);
 
   const handleNext = useCallback(() => {
-    setCurrentTime((prev) => Math.min(TOTAL_DURATION, prev + 10));
-  }, []);
+    setCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
+  }, [currentSong.duration]);
 
   const handleSeek = useCallback((time: number) => {
     setCurrentTime(time);
@@ -86,6 +96,12 @@ export default function Index() {
     );
   }, []);
 
+  const handleSongSelect = useCallback((song: Song) => {
+    setCurrentSong(song);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setCurrentBeat(1);
+  }, []);
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -98,14 +114,14 @@ export default function Index() {
           <div>
             <h1 className="text-sm font-semibold flex items-center gap-1.5">
               <Music className="w-4 h-4 text-primary" />
-              Amazing Grace
+              {currentSong.title}
             </h1>
-            <p className="text-[10px] text-muted-foreground">Gospel Arrangement</p>
+            <p className="text-[10px] text-muted-foreground">{currentSong.artist}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <TimeDisplay currentTime={currentTime} totalDuration={TOTAL_DURATION} />
+          <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
           <button className="transport-btn min-w-[40px] min-h-[40px]">
             <Settings className="w-4 h-4" />
           </button>
@@ -113,14 +129,21 @@ export default function Index() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-3 overflow-y-auto min-h-0">
+      <main className="flex-1 p-3 overflow-hidden min-h-0 flex flex-col gap-3">
         <SongViewer
           currentTime={currentTime}
-          totalDuration={TOTAL_DURATION}
+          totalDuration={currentSong.duration}
           isPlaying={isPlaying}
           onSeek={handleSeek}
           tracks={tracks}
           onVolumeChange={handleVolumeChange}
+        />
+
+        {/* Song List */}
+        <SongList
+          songs={demoSongs}
+          currentSongId={currentSong.id}
+          onSongSelect={handleSongSelect}
         />
       </main>
 
@@ -129,7 +152,7 @@ export default function Index() {
         <MasterControls
           masterVolume={masterVolume}
           clickVolume={clickVolume}
-          bpm={BPM}
+          bpm={currentSong.bpm}
           isClickActive={isClickActive}
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
