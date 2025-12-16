@@ -469,8 +469,33 @@ export default function Index() {
 
   if (!currentSong) {
     return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
+      <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">Nenhuma música selecionada</p>
+        <button
+          onClick={() => setShowLibrary(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+        >
+          <Music className="w-4 h-4" />
+          Abrir Biblioteca
+        </button>
+        
+        {/* Music Library Modal */}
+        {showLibrary && (
+          <MusicLibrary
+            songs={allLibrarySongs}
+            selectedIds={selectedSongIds}
+            onToggleSelect={handleToggleLibrarySong}
+            onClose={() => setShowLibrary(false)}
+          />
+        )}
+        
+        {/* Import Music Modal */}
+        {showImport && (
+          <ImportMusic
+            onImport={handleImportSongs}
+            onClose={() => setShowImport(false)}
+          />
+        )}
       </div>
     );
   }
