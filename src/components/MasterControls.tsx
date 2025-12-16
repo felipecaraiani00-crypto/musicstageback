@@ -1,29 +1,29 @@
-import { Volume2, Disc3 } from "lucide-react";
+import { Volume2, Music, VolumeX } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
 interface MasterControlsProps {
   masterVolume: number;
-  clickVolume: number;
   bpm: number;
   isClickActive: boolean;
   currentBeat: number;
   beatsPerBar: number;
+  isFadingToClick: boolean;
+  fadeProgress: number; // 0 = full instruments, 100 = only click
   onMasterVolumeChange: (volume: number) => void;
-  onClickVolumeChange: (volume: number) => void;
-  onClickToggle: () => void;
+  onFadeToClickToggle: () => void;
 }
 
 export function MasterControls({
   masterVolume,
-  clickVolume,
   bpm,
   isClickActive,
   currentBeat,
   beatsPerBar,
+  isFadingToClick,
+  fadeProgress,
   onMasterVolumeChange,
-  onClickVolumeChange,
-  onClickToggle,
+  onFadeToClickToggle,
 }: MasterControlsProps) {
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -56,32 +56,44 @@ export function MasterControls({
         </div>
       </div>
 
-      {/* Click Track Control */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onClickToggle}
-          className={cn(
-            "transport-btn min-w-[36px] min-h-[36px]",
-            isClickActive && "bg-accent text-accent-foreground"
+      {/* Fade to Click Button */}
+      <button
+        onClick={onFadeToClickToggle}
+        className={cn(
+          "relative flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all overflow-hidden",
+          isFadingToClick || fadeProgress > 0
+            ? "bg-accent text-accent-foreground"
+            : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+        )}
+      >
+        {/* Progress bar background */}
+        <div 
+          className="absolute inset-0 bg-accent/30 transition-all duration-100"
+          style={{ 
+            width: `${fadeProgress}%`,
+            opacity: fadeProgress > 0 ? 1 : 0
+          }}
+        />
+        
+        <span className="relative z-10 flex items-center gap-1.5">
+          {fadeProgress >= 100 ? (
+            <>
+              <VolumeX className="w-4 h-4" />
+              <span>SÓ CLICK</span>
+            </>
+          ) : fadeProgress > 0 ? (
+            <>
+              <Music className="w-4 h-4 animate-pulse" />
+              <span>FADE {Math.round(fadeProgress)}%</span>
+            </>
+          ) : (
+            <>
+              <Music className="w-4 h-4" />
+              <span>FADE</span>
+            </>
           )}
-          aria-label="Toggle click track"
-        >
-          <Disc3 className={cn("w-4 h-4", isClickActive && "animate-spin")} />
-        </button>
-
-        <div className="flex items-center gap-1 w-[80px]">
-          <Slider
-            value={[clickVolume]}
-            max={100}
-            step={1}
-            onValueChange={([value]) => onClickVolumeChange(value)}
-            className="flex-1"
-          />
-          <span className="text-[10px] font-mono text-muted-foreground w-6">
-            {clickVolume}
-          </span>
-        </div>
-      </div>
+        </span>
+      </button>
 
       {/* Master Volume */}
       <div className="flex items-center gap-1">
