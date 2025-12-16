@@ -63,6 +63,7 @@ export default function Index() {
     currentTime: engineCurrentTime,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
+    handleTrackSoloToggle,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     play: enginePlay,
@@ -198,6 +199,13 @@ export default function Index() {
     }
   }, [isImportedSong, handleTrackMuteToggle]);
 
+  // Handle solo toggle
+  const handleSoloToggle = useCallback((trackId: string) => {
+    if (isImportedSong) {
+      handleTrackSoloToggle(trackId);
+    }
+  }, [isImportedSong, handleTrackSoloToggle]);
+
   const handleSongSelect = useCallback((song: Song) => {
     // Stop any current playback
     if (isImportedSong) {
@@ -298,6 +306,7 @@ export default function Index() {
             tracks={activeTracks}
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
+            onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
             waveformData={isImportedSong ? currentWaveformData : undefined}
           />
         </div>

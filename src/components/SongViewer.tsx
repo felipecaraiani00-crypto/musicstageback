@@ -12,6 +12,7 @@ interface SongViewerProps {
   tracks: FaderTrack[];
   onVolumeChange: (trackId: string, volume: number) => void;
   onMuteToggle?: (trackId: string) => void;
+  onSoloToggle?: (trackId: string) => void;
   waveformData?: number[];
 }
 
@@ -25,6 +26,7 @@ export function SongViewer({
   tracks,
   onVolumeChange,
   onMuteToggle,
+  onSoloToggle,
   waveformData,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
@@ -72,6 +74,7 @@ export function SongViewer({
             tracks={tracks} 
             onVolumeChange={onVolumeChange}
             onMuteToggle={onMuteToggle}
+            onSoloToggle={onSoloToggle}
           />
         )}
       </div>
