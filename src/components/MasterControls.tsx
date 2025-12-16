@@ -1,4 +1,4 @@
-import { Volume2, Music, VolumeX } from "lucide-react";
+import { Volume2, Music, VolumeX, Mic, MicOff } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
@@ -9,9 +9,11 @@ interface MasterControlsProps {
   currentBeat: number;
   beatsPerBar: number;
   isFadingToClick: boolean;
-  fadeProgress: number; // 0 = full instruments, 100 = only click
+  fadeProgress: number;
+  voiceEnabled: boolean;
   onMasterVolumeChange: (volume: number) => void;
   onFadeToClickToggle: () => void;
+  onVoiceToggle: () => void;
 }
 
 export function MasterControls({
@@ -22,8 +24,10 @@ export function MasterControls({
   beatsPerBar,
   isFadingToClick,
   fadeProgress,
+  voiceEnabled,
   onMasterVolumeChange,
   onFadeToClickToggle,
+  onVoiceToggle,
 }: MasterControlsProps) {
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -66,7 +70,6 @@ export function MasterControls({
             : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
         )}
       >
-        {/* Progress bar background */}
         <div 
           className="absolute inset-0 bg-accent/30 transition-all duration-100"
           style={{ 
@@ -93,6 +96,25 @@ export function MasterControls({
             </>
           )}
         </span>
+      </button>
+
+      {/* Voice Announcement Toggle */}
+      <button
+        onClick={onVoiceToggle}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-2 rounded-lg font-medium text-xs transition-all",
+          voiceEnabled
+            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+            : "bg-secondary hover:bg-secondary/80 text-muted-foreground"
+        )}
+        title={voiceEnabled ? "Voz ativada" : "Voz desativada"}
+      >
+        {voiceEnabled ? (
+          <Mic className="w-4 h-4" />
+        ) : (
+          <MicOff className="w-4 h-4" />
+        )}
+        <span className="hidden sm:inline">VOZ</span>
       </button>
 
       {/* Master Volume */}

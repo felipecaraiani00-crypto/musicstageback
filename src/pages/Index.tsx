@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Settings, Music, List } from "lucide-react";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
@@ -8,11 +8,23 @@ import { SongList, Song } from "@/components/SongList";
 import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
-import { SectionEditor, SongSection } from "@/components/SectionEditor";
+import { SectionEditor, SongSection, SectionType } from "@/components/SectionEditor";
 import { CurrentSectionIndicator } from "@/components/CurrentSectionIndicator";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { Song as AudioSong } from "@/lib/audioEngine";
+import { speakSection, initSpeech, isSpeechSupported } from "@/lib/speechSynthesis";
+
+const sectionNames: Record<SectionType, string> = {
+  intro: "Intro",
+  verse: "Verso",
+  "pre-chorus": "Pré-Refrão",
+  chorus: "Refrão",
+  bridge: "Ponte",
+  solo: "Solo",
+  interlude: "Interlúdio",
+  outro: "Outro",
+};
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
@@ -93,6 +105,10 @@ export default function Index() {
   
   // Song sections state (stored per song)
   const [songSections, setSongSections] = useState<Map<string, SongSection[]>>(new Map());
+  
+  // Voice announcement state
+  const [voiceAnnouncementsEnabled, setVoiceAnnouncementsEnabled] = useState(true);
+  const lastAnnouncedSectionRef = useRef<string | null>(null);
 
   // Merge demo songs with imported audio engine songs
   const allLibrarySongs: Song[] = [
@@ -116,6 +132,35 @@ export default function Index() {
     ? currentFaderTracks 
     : tracks;
 
+  // Get current section based on time
+  const currentSections = currentSong ? (songSections.get(currentSong.id) || []) : [];
+  const currentSection = useMemo(() => {
+    return currentSections.find(
+      section => currentTime >= section.startTime && currentTime <= section.endTime
+    );
+  }, [currentSections, currentTime]);
+
+  // Voice announcement for section changes
+  useEffect(() => {
+    if (!voiceAnnouncementsEnabled || !isPlaying || !currentSection) {
+      return;
+    }
+
+    const sectionKey = `${currentSection.id}-${currentSection.type}`;
+    
+    if (lastAnnouncedSectionRef.current !== sectionKey) {
+      lastAnnouncedSectionRef.current = sectionKey;
+      const sectionName = sectionNames[currentSection.type];
+      speakSection(sectionName);
+    }
+  }, [currentSection, isPlaying, voiceAnnouncementsEnabled]);
+
+  // Reset announced section when song changes or stops
+  useEffect(() => {
+    if (!isPlaying) {
+      lastAnnouncedSectionRef.current = null;
+    }
+  }, [isPlaying, currentSongId]);
   // Simulate playback for demo songs only
   useEffect(() => {
     if (!demoIsPlaying || !currentSong || isImportedSong) return;
@@ -407,8 +452,10 @@ export default function Index() {
           beatsPerBar={BEATS_PER_BAR}
           isFadingToClick={isFadingToClick}
           fadeProgress={fadeProgress}
+          voiceEnabled={voiceAnnouncementsEnabled}
           onMasterVolumeChange={setMasterVolume}
           onFadeToClickToggle={handleFadeToClickToggle}
+          onVoiceToggle={() => setVoiceAnnouncementsEnabled(prev => !prev)}
         />
 
         <TransportControls
