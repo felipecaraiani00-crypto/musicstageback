@@ -388,6 +388,72 @@ class AudioEngine {
     }
   }
 
+  // ========== WAVEFORM GENERATION ==========
+
+  // Generate waveform data from song's AudioBuffers
+  getWaveformData(songId: string, numPoints: number = 300): number[] {
+    const song = this.songs.get(songId);
+    if (!song || song.tracks.length === 0) {
+      return [];
+    }
+
+    // Find the longest track to determine total samples
+    let maxLength = 0;
+    let sampleRate = 44100;
+    
+    song.tracks.forEach(track => {
+      if (track.audioBuffer) {
+        maxLength = Math.max(maxLength, track.audioBuffer.length);
+        sampleRate = track.audioBuffer.sampleRate;
+      }
+    });
+
+    if (maxLength === 0) return [];
+
+    // Combine all tracks into a single waveform (sum and normalize)
+    const combinedData = new Float32Array(maxLength);
+    let trackCount = 0;
+
+    song.tracks.forEach(track => {
+      if (track.audioBuffer) {
+        const channelData = track.audioBuffer.getChannelData(0); // Use first channel
+        for (let i = 0; i < channelData.length; i++) {
+          combinedData[i] += channelData[i];
+        }
+        trackCount++;
+      }
+    });
+
+    // Normalize by track count
+    if (trackCount > 0) {
+      for (let i = 0; i < combinedData.length; i++) {
+        combinedData[i] /= trackCount;
+      }
+    }
+
+    // Downsample to requested number of points
+    const samplesPerPoint = Math.floor(maxLength / numPoints);
+    const waveformPoints: number[] = [];
+
+    for (let i = 0; i < numPoints; i++) {
+      const start = i * samplesPerPoint;
+      const end = Math.min(start + samplesPerPoint, maxLength);
+      
+      // Calculate RMS for this segment
+      let sum = 0;
+      for (let j = start; j < end; j++) {
+        sum += combinedData[j] * combinedData[j];
+      }
+      const rms = Math.sqrt(sum / (end - start));
+      
+      // Normalize to 0-1 range (RMS values are typically 0-0.5 for audio)
+      const normalized = Math.min(1, rms * 3);
+      waveformPoints.push(normalized);
+    }
+
+    return waveformPoints;
+  }
+
   // ========== STATE MANAGEMENT ==========
 
   // Subscribe to state changes

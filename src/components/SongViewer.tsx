@@ -12,6 +12,7 @@ interface SongViewerProps {
   tracks: FaderTrack[];
   onVolumeChange: (trackId: string, volume: number) => void;
   onMuteToggle?: (trackId: string) => void;
+  waveformData?: number[];
 }
 
 type ViewMode = "waveform" | "faders";
@@ -24,6 +25,7 @@ export function SongViewer({
   tracks,
   onVolumeChange,
   onMuteToggle,
+  waveformData,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
@@ -63,6 +65,7 @@ export function SongViewer({
             totalDuration={totalDuration}
             isPlaying={isPlaying}
             onSeek={onSeek}
+            waveformData={waveformData}
           />
         ) : (
           <HorizontalFaders 
