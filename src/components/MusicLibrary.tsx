@@ -22,7 +22,7 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
   const filteredSongs = songs.filter(
     (song) =>
       song.title.toLowerCase().includes(search.toLowerCase()) ||
-      song.artist.toLowerCase().includes(search.toLowerCase())
+      (song.artist?.toLowerCase().includes(search.toLowerCase()) ?? false)
   );
 
   const selectedCount = selectedIds.length;
@@ -90,7 +90,9 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
                 <p className={cn("text-sm font-medium truncate", isSelected && "text-primary")}>
                   {song.title}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {song.artist || (song.trackCount ? `${song.trackCount} tracks` : '')}
+                </p>
               </div>
 
               {/* Duration & BPM */}

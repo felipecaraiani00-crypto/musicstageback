@@ -9,6 +9,8 @@ import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { FaderTrack } from "@/components/HorizontalFaders";
+import { useAudioEngine } from "@/hooks/useAudioEngine";
+import { Song as AudioSong } from "@/lib/audioEngine";
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
@@ -19,26 +21,27 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// All available songs in library
-const allSongs: Song[] = [
-  { id: "1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
-  { id: "2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
-  { id: "3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
-  { id: "4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
-  { id: "5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
-  { id: "6", title: "Way Maker", artist: "Sinach", duration: 295, bpm: 68 },
-  { id: "7", title: "Goodness of God", artist: "Bethel Music", duration: 275, bpm: 63 },
-  { id: "8", title: "Build My Life", artist: "Housefires", duration: 258, bpm: 72 },
-  { id: "9", title: "Great Are You Lord", artist: "All Sons & Daughters", duration: 312, bpm: 66 },
-  { id: "10", title: "Oceans", artist: "Hillsong United", duration: 485, bpm: 66 },
-  { id: "11", title: "King of Kings", artist: "Hillsong Worship", duration: 378, bpm: 72 },
-  { id: "12", title: "Who You Say I Am", artist: "Hillsong Worship", duration: 258, bpm: 74 },
-  { id: "13", title: "Living Hope", artist: "Phil Wickham", duration: 312, bpm: 69 },
-  { id: "14", title: "Graves Into Gardens", artist: "Elevation Worship", duration: 346, bpm: 72 },
-  { id: "15", title: "The Blessing", artist: "Kari Jobe", duration: 425, bpm: 68 },
+// All available songs in library (demo data)
+const demoSongs: Song[] = [
+  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
+  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
+  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
+  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
+  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
 ];
 
 const BEATS_PER_BAR = 4;
+
+// Convert AudioEngine Song to UI Song format
+function audioSongToUISong(audioSong: AudioSong): Song {
+  return {
+    id: audioSong.id,
+    title: audioSong.songName,
+    duration: audioSong.duration,
+    bpm: audioSong.bpm,
+    trackCount: audioSong.tracks.length,
+  };
+}
 
 export default function Index() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -49,19 +52,44 @@ export default function Index() {
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
   
+  // Audio Engine integration
+  const { 
+    songs: audioEngineSongs, 
+    currentSongId: audioCurrentSongId,
+    currentFaderTracks,
+    handleTrackVolumeChange,
+    handleTrackMuteToggle,
+    setMasterVolume: setEngineMasterVolume,
+    setCurrentSong: setEngineCurrentSong,
+  } = useAudioEngine();
+  
   // Library & Setlist state
-  const [librarySongs, setLibrarySongs] = useState<Song[]>(allSongs);
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["1", "2", "3", "4", "5"]);
-  const [currentSongId, setCurrentSongId] = useState<string>("1");
+  const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["demo-1", "demo-2", "demo-3"]);
+  const [currentSongId, setCurrentSongId] = useState<string>("demo-1");
 
   // Modal states
   const [showSettings, setShowSettings] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
+  // Merge demo songs with imported audio engine songs
+  const allLibrarySongs: Song[] = [
+    ...librarySongs,
+    ...audioEngineSongs.map(audioSongToUISong),
+  ];
+
   // Derived state
-  const setlistSongs = librarySongs.filter((s) => selectedSongIds.includes(s.id));
-  const currentSong = librarySongs.find((s) => s.id === currentSongId) || setlistSongs[0];
+  const setlistSongs = allLibrarySongs.filter((s) => selectedSongIds.includes(s.id));
+  const currentSong = allLibrarySongs.find((s) => s.id === currentSongId) || setlistSongs[0];
+  
+  // Check if current song is from audio engine (has tracks)
+  const isImportedSong = audioEngineSongs.some(s => s.id === currentSongId);
+  
+  // Use audio engine tracks if available, otherwise use demo tracks
+  const activeTracks = isImportedSong && currentFaderTracks.length > 0 
+    ? currentFaderTracks 
+    : tracks;
 
   // Simulate playback
   useEffect(() => {
@@ -116,18 +144,37 @@ export default function Index() {
     setCurrentTime(time);
   }, []);
 
+  // Handle volume change - route to appropriate handler
   const handleVolumeChange = useCallback((trackId: string, volume: number) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === trackId ? { ...t, volume } : t))
-    );
-  }, []);
+    if (isImportedSong) {
+      // Use audio engine for imported songs
+      handleTrackVolumeChange(trackId, volume);
+    } else {
+      // Use local state for demo songs
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, volume } : t))
+      );
+    }
+  }, [isImportedSong, handleTrackVolumeChange]);
+
+  // Handle mute toggle
+  const handleMuteToggle = useCallback((trackId: string) => {
+    if (isImportedSong) {
+      handleTrackMuteToggle(trackId);
+    }
+  }, [isImportedSong, handleTrackMuteToggle]);
 
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
     setCurrentTime(0);
     setIsPlaying(false);
     setCurrentBeat(1);
-  }, []);
+    
+    // Also update audio engine if it's an imported song
+    if (audioEngineSongs.some(s => s.id === song.id)) {
+      setEngineCurrentSong(song.id);
+    }
+  }, [audioEngineSongs, setEngineCurrentSong]);
 
   const handleToggleLibrarySong = useCallback((songId: string) => {
     setSelectedSongIds((prev) =>
@@ -137,11 +184,21 @@ export default function Index() {
     );
   }, []);
 
-  const handleImportSongs = useCallback((newSongs: Song[]) => {
-    setLibrarySongs((prev) => [...prev, ...newSongs]);
+  const handleImportSongs = useCallback((newSongs: AudioSong[]) => {
     // Auto-select imported songs
     setSelectedSongIds((prev) => [...prev, ...newSongs.map((s) => s.id)]);
-  }, []);
+    
+    // Select the first imported song
+    if (newSongs.length > 0) {
+      setCurrentSongId(newSongs[0].id);
+      setEngineCurrentSong(newSongs[0].id);
+    }
+  }, [setEngineCurrentSong]);
+
+  // Update master volume in audio engine
+  useEffect(() => {
+    setEngineMasterVolume(masterVolume);
+  }, [masterVolume, setEngineMasterVolume]);
 
   if (!currentSong) {
     return (
@@ -164,7 +221,9 @@ export default function Index() {
               <Music className="w-4 h-4 text-primary" />
               {currentSong.title}
             </h1>
-            <p className="text-[10px] text-muted-foreground">{currentSong.artist}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {currentSong.artist || `${currentSong.trackCount} tracks`}
+            </p>
           </div>
         </div>
 
@@ -196,8 +255,9 @@ export default function Index() {
             totalDuration={currentSong.duration}
             isPlaying={isPlaying}
             onSeek={handleSeek}
-            tracks={tracks}
+            tracks={activeTracks}
             onVolumeChange={handleVolumeChange}
+            onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
           />
         </div>
 
@@ -237,7 +297,7 @@ export default function Index() {
       {/* Library Modal */}
       {showLibrary && (
         <MusicLibrary
-          songs={librarySongs}
+          songs={allLibrarySongs}
           selectedIds={selectedSongIds}
           onToggleSelect={handleToggleLibrarySong}
           onClose={() => setShowLibrary(false)}

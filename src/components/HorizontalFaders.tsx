@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { VolumeX, Volume2 } from "lucide-react";
 
 export interface FaderTrack {
   id: string;
@@ -8,14 +9,16 @@ export interface FaderTrack {
   icon: string;
   color: string;
   volume: number;
+  isMuted?: boolean;
 }
 
 interface HorizontalFadersProps {
   tracks: FaderTrack[];
   onVolumeChange: (trackId: string, volume: number) => void;
+  onMuteToggle?: (trackId: string) => void;
 }
 
-export function HorizontalFaders({ tracks, onVolumeChange }: HorizontalFadersProps) {
+export function HorizontalFaders({ tracks, onVolumeChange, onMuteToggle }: HorizontalFadersProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -27,14 +30,25 @@ export function HorizontalFaders({ tracks, onVolumeChange }: HorizontalFadersPro
         {tracks.map((track) => (
           <div
             key={track.id}
-            className="flex flex-col items-center justify-between py-1 px-1.5 rounded-lg bg-secondary/50 min-w-[50px]"
+            className={cn(
+              "flex flex-col items-center justify-between py-1 px-1.5 rounded-lg bg-secondary/50 min-w-[50px]",
+              track.isMuted && "opacity-50"
+            )}
           >
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center text-sm shadow-lg flex-shrink-0"
-              style={{ backgroundColor: track.color }}
+            <button
+              onClick={() => onMuteToggle?.(track.id)}
+              className={cn(
+                "w-6 h-6 rounded flex items-center justify-center text-sm shadow-lg flex-shrink-0 transition-all",
+                track.isMuted ? "bg-muted" : ""
+              )}
+              style={{ backgroundColor: track.isMuted ? undefined : track.color }}
             >
-              {track.icon}
-            </div>
+              {track.isMuted ? (
+                <VolumeX className="w-3 h-3" />
+              ) : (
+                track.icon
+              )}
+            </button>
 
             <span className="text-[9px] font-medium text-muted-foreground truncate max-w-[48px]">
               {track.name}
@@ -43,16 +57,17 @@ export function HorizontalFaders({ tracks, onVolumeChange }: HorizontalFadersPro
             <div className="flex-1 flex items-center justify-center min-h-[40px]">
               <Slider
                 orientation="vertical"
-                value={[track.volume]}
+                value={[track.isMuted ? 0 : track.volume]}
                 max={100}
                 step={1}
                 onValueChange={([value]) => onVolumeChange(track.id, value)}
                 className="h-full max-h-[60px]"
+                disabled={track.isMuted}
               />
             </div>
 
             <span className="text-[9px] font-mono text-primary flex-shrink-0">
-              {track.volume}
+              {track.isMuted ? "M" : track.volume}
             </span>
           </div>
         ))}
