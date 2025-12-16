@@ -88,33 +88,32 @@ export default function Index() {
 
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50">
-        <div className="flex items-center gap-3">
-          <button className="transport-btn min-w-[44px] min-h-[44px]">
-            <List className="w-5 h-5" />
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Header - Compacto */}
+      <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50">
+        <div className="flex items-center gap-2">
+          <button className="transport-btn min-w-[40px] min-h-[40px]">
+            <List className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-lg font-semibold flex items-center gap-2">
-              <Music className="w-5 h-5 text-primary" />
+            <h1 className="text-sm font-semibold flex items-center gap-1.5">
+              <Music className="w-4 h-4 text-primary" />
               Amazing Grace
             </h1>
-            <p className="text-xs text-muted-foreground">Gospel Arrangement</p>
+            <p className="text-[10px] text-muted-foreground">Gospel Arrangement</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <TimeDisplay currentTime={currentTime} totalDuration={TOTAL_DURATION} />
-          <button className="transport-btn min-w-[44px] min-h-[44px]">
-            <Settings className="w-5 h-5" />
+          <button className="transport-btn min-w-[40px] min-h-[40px]">
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 overflow-y-auto min-h-0">
-        {/* Song Viewer (Waveform / Faders toggle) */}
+      <main className="flex-1 p-3 overflow-y-auto min-h-0">
         <SongViewer
           currentTime={currentTime}
           totalDuration={TOTAL_DURATION}
@@ -125,9 +124,8 @@ export default function Index() {
         />
       </main>
 
-      {/* Footer Controls */}
-      <footer className="border-t border-border bg-card/80 backdrop-blur-sm p-4 space-y-4">
-        {/* Master Controls */}
+      {/* Footer Controls - Compacto */}
+      <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-2 space-y-2">
         <MasterControls
           masterVolume={masterVolume}
           clickVolume={clickVolume}
@@ -140,7 +138,6 @@ export default function Index() {
           onClickToggle={() => setIsClickActive((prev) => !prev)}
         />
 
-        {/* Transport */}
         <div className="flex justify-center">
           <TransportControls
             isPlaying={isPlaying}

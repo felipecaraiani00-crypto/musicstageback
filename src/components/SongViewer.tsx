@@ -26,28 +26,27 @@ export function SongViewer({
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
   return (
-    <div className="glass-panel p-4 space-y-3">
+    <div className="glass-panel p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          {viewMode === "waveform" ? "Waveform" : "Track Faders"}
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {viewMode === "waveform" ? "Waveform" : "Faders"}
         </h3>
 
-        {/* Toggle button */}
         <button
           onClick={() => setViewMode(viewMode === "waveform" ? "faders" : "waveform")}
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+            "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all",
             "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
           )}
         >
           {viewMode === "waveform" ? (
             <>
-              <SlidersHorizontal className="w-4 h-4" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Faders</span>
             </>
           ) : (
             <>
-              <AudioWaveform className="w-4 h-4" />
+              <AudioWaveform className="w-3.5 h-3.5" />
               <span>Wave</span>
             </>
           )}
