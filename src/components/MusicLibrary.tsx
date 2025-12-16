@@ -1,12 +1,23 @@
 import { useState } from "react";
-import { Music, Check, Plus, Search } from "lucide-react";
+import { Music, Check, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Song } from "./SongList";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface MusicLibraryProps {
   songs: Song[];
   selectedIds: string[];
   onToggleSelect: (songId: string) => void;
+  onDeleteSong?: (songId: string) => void;
   onClose: () => void;
 }
 
@@ -16,8 +27,9 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: MusicLibraryProps) {
+export function MusicLibrary({ songs, selectedIds, onToggleSelect, onDeleteSong, onClose }: MusicLibraryProps) {
   const [search, setSearch] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<Song | null>(null);
 
   const filteredSongs = songs.filter(
     (song) =>
@@ -96,11 +108,25 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
               </div>
 
               {/* Duration & BPM */}
-              <div className="text-right">
-                <p className="text-xs font-mono text-muted-foreground">
-                  {formatDuration(song.duration)}
-                </p>
-                <p className="text-xs font-mono text-muted-foreground">{song.bpm} bpm</p>
+              <div className="text-right flex items-center gap-2">
+                <div>
+                  <p className="text-xs font-mono text-muted-foreground">
+                    {formatDuration(song.duration)}
+                  </p>
+                  <p className="text-xs font-mono text-muted-foreground">{song.bpm} bpm</p>
+                </div>
+                {onDeleteSong && !song.id.startsWith('demo-') && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirm(song);
+                    }}
+                    className="p-2 rounded-md hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Excluir música"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </button>
           );
@@ -113,6 +139,32 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir música?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir "{deleteConfirm?.title}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteConfirm && onDeleteSong) {
+                  onDeleteSong(deleteConfirm.id);
+                  setDeleteConfirm(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
