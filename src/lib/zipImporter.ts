@@ -1,8 +1,9 @@
 import JSZip from 'jszip';
 import { audioEngine, Song, Track } from './audioEngine';
+import { detectBPMFromTracks } from './bpmDetector';
 
 export interface ImportProgress {
-  stage: 'extracting' | 'decoding' | 'complete';
+  stage: 'extracting' | 'decoding' | 'analyzing' | 'complete';
   currentFile: string;
   progress: number; // 0 to 100
 }
@@ -75,11 +76,12 @@ export async function importZipFile(
     onProgress?.({
       stage: 'extracting',
       currentFile: file.name,
-      progress: 20,
+      progress: 15,
     });
 
     // Process each audio file
     const tracks: Track[] = [];
+    const audioBuffers: AudioBuffer[] = [];
     let maxDuration = 0;
     
     for (let i = 0; i < audioFiles.length; i++) {
@@ -89,7 +91,7 @@ export async function importZipFile(
       onProgress?.({
         stage: 'decoding',
         currentFile: trackName,
-        progress: 20 + Math.floor((i / audioFiles.length) * 70),
+        progress: 15 + Math.floor((i / audioFiles.length) * 60),
       });
 
       // Extract file content
@@ -103,6 +105,7 @@ export async function importZipFile(
       
       if (audioBuffer) {
         maxDuration = Math.max(maxDuration, audioBuffer.duration);
+        audioBuffers.push(audioBuffer);
       }
 
       const track: Track = {
@@ -118,6 +121,18 @@ export async function importZipFile(
       tracks.push(track);
     }
 
+    // Detect BPM from audio buffers
+    onProgress?.({
+      stage: 'analyzing',
+      currentFile: 'Detectando BPM...',
+      progress: 80,
+    });
+
+    const bpmResult = detectBPMFromTracks(audioBuffers);
+    const detectedBpm = bpmResult.bpm;
+
+    console.log(`BPM detectado para "${songName}": ${detectedBpm} (confiança: ${Math.round(bpmResult.confidence * 100)}%)`);
+
     onProgress?.({
       stage: 'complete',
       currentFile: songName,
@@ -130,7 +145,7 @@ export async function importZipFile(
       songName,
       tracks,
       duration: Math.ceil(maxDuration),
-      bpm: 120, // Default BPM, could be extracted from metadata
+      bpm: detectedBpm,
     };
 
     // Add song to audio engine
