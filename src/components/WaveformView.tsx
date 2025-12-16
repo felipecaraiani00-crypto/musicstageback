@@ -97,10 +97,10 @@ export function WaveformView({
   return (
     <div
       ref={containerRef}
-      className="overflow-x-auto scrollbar-thin cursor-pointer"
+      className="overflow-x-auto scrollbar-thin cursor-pointer h-full"
       onClick={handleClick}
     >
-      <div className="relative min-w-[600px] h-12">
+      <div className="relative min-w-[600px] h-full min-h-[40px]">
         <canvas
           ref={canvasRef}
           className="w-full h-full"

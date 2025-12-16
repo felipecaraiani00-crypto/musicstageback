@@ -26,35 +26,35 @@ export function SongViewer({
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
   return (
-    <div className="glass-panel p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+    <div className="glass-panel p-2 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
           {viewMode === "waveform" ? "Waveform" : "Faders"}
         </h3>
 
         <button
           onClick={() => setViewMode(viewMode === "waveform" ? "faders" : "waveform")}
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all",
+            "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
             "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
           )}
         >
           {viewMode === "waveform" ? (
             <>
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-3 h-3" />
               <span>Faders</span>
             </>
           ) : (
             <>
-              <AudioWaveform className="w-3.5 h-3.5" />
+              <AudioWaveform className="w-3 h-3" />
               <span>Wave</span>
             </>
           )}
         </button>
       </div>
 
-      {/* View content with animation */}
-      <div className="animate-fade-in">
+      {/* View content */}
+      <div className="flex-1 min-h-0 animate-fade-in">
         {viewMode === "waveform" ? (
           <WaveformView
             currentTime={currentTime}

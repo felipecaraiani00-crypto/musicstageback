@@ -187,27 +187,32 @@ export default function Index() {
         onOpenImport={() => setShowImport(true)}
       />
 
-      {/* Main Content */}
-      <main className="flex-1 p-3 overflow-hidden min-h-0 flex flex-col gap-3">
-        <SongViewer
-          currentTime={currentTime}
-          totalDuration={currentSong.duration}
-          isPlaying={isPlaying}
-          onSeek={handleSeek}
-          tracks={tracks}
-          onVolumeChange={handleVolumeChange}
-        />
+      {/* Main Content - Landscape Layout */}
+      <main className="flex-1 px-2 py-1 overflow-hidden min-h-0 flex gap-2">
+        {/* Left side - Waveform/Faders */}
+        <div className="flex-1 min-w-0">
+          <SongViewer
+            currentTime={currentTime}
+            totalDuration={currentSong.duration}
+            isPlaying={isPlaying}
+            onSeek={handleSeek}
+            tracks={tracks}
+            onVolumeChange={handleVolumeChange}
+          />
+        </div>
 
-        {/* Setlist */}
-        <SongList
-          songs={setlistSongs}
-          currentSongId={currentSongId}
-          onSongSelect={handleSongSelect}
-        />
+        {/* Right side - Setlist */}
+        <div className="w-[200px] flex-shrink-0">
+          <SongList
+            songs={setlistSongs}
+            currentSongId={currentSongId}
+            onSongSelect={handleSongSelect}
+          />
+        </div>
       </main>
 
-      {/* Footer Controls */}
-      <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-2 space-y-2">
+      {/* Footer Controls - Horizontal Layout */}
+      <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-1 flex items-center justify-between gap-4">
         <MasterControls
           masterVolume={masterVolume}
           clickVolume={clickVolume}
@@ -220,15 +225,13 @@ export default function Index() {
           onClickToggle={() => setIsClickActive((prev) => !prev)}
         />
 
-        <div className="flex justify-center">
-          <TransportControls
-            isPlaying={isPlaying}
-            onPlayPause={handlePlayPause}
-            onStop={handleStop}
-            onPrev={handlePrev}
-            onNext={handleNext}
-          />
-        </div>
+        <TransportControls
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          onStop={handleStop}
+          onPrev={handlePrev}
+          onNext={handleNext}
+        />
       </footer>
 
       {/* Library Modal */}
