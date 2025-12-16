@@ -11,12 +11,12 @@ function formatTime(seconds: number): string {
 
 export function TimeDisplay({ currentTime, totalDuration }: TimeDisplayProps) {
   return (
-    <div className="flex items-baseline gap-1 font-mono">
-      <span className="text-2xl font-bold text-primary text-glow-primary">
+    <div className="flex items-baseline gap-0.5 font-mono">
+      <span className="text-base font-bold text-primary text-glow-primary">
         {formatTime(currentTime)}
       </span>
-      <span className="text-lg text-muted-foreground">/</span>
-      <span className="text-lg text-muted-foreground">
+      <span className="text-xs text-muted-foreground">/</span>
+      <span className="text-xs text-muted-foreground">
         {formatTime(totalDuration)}
       </span>
     </div>

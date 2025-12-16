@@ -100,7 +100,7 @@ export function WaveformView({
       className="overflow-x-auto scrollbar-thin cursor-pointer"
       onClick={handleClick}
     >
-      <div className="relative min-w-[800px] h-16">
+      <div className="relative min-w-[600px] h-12">
         <canvas
           ref={canvasRef}
           className="w-full h-full"
@@ -112,7 +112,7 @@ export function WaveformView({
           className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg pointer-events-none transition-all duration-100"
           style={{ left: `${progressPercent}%` }}
         >
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-accent rotate-45" />
+          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-2 h-2 bg-accent rotate-45" />
         </div>
       </div>
     </div>

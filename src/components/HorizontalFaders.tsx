@@ -21,42 +21,38 @@ export function HorizontalFaders({ tracks, onVolumeChange }: HorizontalFadersPro
   return (
     <div
       ref={containerRef}
-      className="overflow-x-auto scrollbar-thin pb-2"
+      className="overflow-x-auto scrollbar-thin pb-1"
     >
-      <div className="flex gap-3 min-w-max px-1">
+      <div className="flex gap-2 min-w-max px-1">
         {tracks.map((track) => (
           <div
             key={track.id}
-            className="flex flex-col items-center gap-2 p-3 rounded-lg bg-secondary/50 min-w-[80px]"
+            className="flex flex-col items-center gap-1.5 p-2 rounded-lg bg-secondary/50 min-w-[60px]"
           >
-            {/* Track icon */}
             <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center text-xl shadow-lg"
+              className="w-8 h-8 rounded-md flex items-center justify-center text-base shadow-lg"
               style={{ backgroundColor: track.color }}
             >
               {track.icon}
             </div>
 
-            {/* Track name */}
-            <span className="text-xs font-medium text-muted-foreground truncate max-w-[70px]">
+            <span className="text-[10px] font-medium text-muted-foreground truncate max-w-[55px]">
               {track.name}
             </span>
 
-            {/* Vertical slider (rotated to look horizontal in card) */}
-            <div className="h-24 flex items-center justify-center">
+            <div className="h-16 flex items-center justify-center">
               <Slider
                 orientation="vertical"
                 value={[track.volume]}
                 max={100}
                 step={1}
                 onValueChange={([value]) => onVolumeChange(track.id, value)}
-                className="h-20"
+                className="h-14"
               />
             </div>
 
-            {/* Volume value */}
-            <span className="text-xs font-mono text-primary">
-              {track.volume}%
+            <span className="text-[10px] font-mono text-primary">
+              {track.volume}
             </span>
           </div>
         ))}

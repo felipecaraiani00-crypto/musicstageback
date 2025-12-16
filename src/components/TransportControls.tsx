@@ -16,41 +16,41 @@ export function TransportControls({
   onNext,
 }: TransportControlsProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <button
         onClick={onPrev}
-        className="transport-btn"
+        className="transport-btn min-w-[40px] min-h-[40px]"
         aria-label="Previous section"
       >
-        <SkipBack className="w-5 h-5" />
+        <SkipBack className="w-4 h-4" />
       </button>
 
       <button
         onClick={onStop}
-        className="transport-btn-stop"
+        className="transport-btn-stop min-w-[40px] min-h-[40px]"
         aria-label="Stop"
       >
-        <Square className="w-5 h-5 fill-current" />
+        <Square className="w-4 h-4 fill-current" />
       </button>
 
       <button
         onClick={onPlayPause}
-        className="transport-btn-primary min-w-[56px] min-h-[56px]"
+        className="transport-btn-primary min-w-[48px] min-h-[48px]"
         aria-label={isPlaying ? "Pause" : "Play"}
       >
         {isPlaying ? (
-          <Pause className="w-7 h-7 fill-current" />
+          <Pause className="w-5 h-5 fill-current" />
         ) : (
-          <Play className="w-7 h-7 fill-current ml-1" />
+          <Play className="w-5 h-5 fill-current ml-0.5" />
         )}
       </button>
 
       <button
         onClick={onNext}
-        className="transport-btn"
+        className="transport-btn min-w-[40px] min-h-[40px]"
         aria-label="Next section"
       >
-        <SkipForward className="w-5 h-5" />
+        <SkipForward className="w-4 h-4" />
       </button>
     </div>
   );
