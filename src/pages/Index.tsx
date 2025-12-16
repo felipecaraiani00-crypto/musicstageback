@@ -549,7 +549,7 @@ export default function Index() {
 
         <div className="flex items-center gap-2">
           {/* Cloud Sync Indicator */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50" title={syncing ? "Sincronizando..." : "Sincronizado"}>
+          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50" title={syncing ? "Sincronizando..." : `${cloudSongs.length} música${cloudSongs.length !== 1 ? 's' : ''} na nuvem`}>
             {syncing ? (
               <>
                 <Cloud className="w-3.5 h-3.5 text-primary animate-pulse" />
@@ -558,7 +558,7 @@ export default function Index() {
             ) : (
               <>
                 <Cloud className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">Cloud</span>
+                <span className="text-[10px] text-muted-foreground">{cloudSongs.length}</span>
               </>
             )}
           </div>
