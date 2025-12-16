@@ -140,20 +140,31 @@ export default function Index() {
     );
   }, [currentSections, currentTime]);
 
-  // Voice announcement for section changes
+  // Calculate 2 beats in seconds based on BPM
+  const twoBeatsInSeconds = currentSong ? (60 / currentSong.bpm) * 2 : 0;
+
+  // Find upcoming section (2 beats ahead)
+  const upcomingSection = useMemo(() => {
+    const lookAheadTime = currentTime + twoBeatsInSeconds;
+    return currentSections.find(
+      section => lookAheadTime >= section.startTime && lookAheadTime <= section.startTime + 0.5
+    );
+  }, [currentSections, currentTime, twoBeatsInSeconds]);
+
+  // Voice announcement for upcoming sections (2 beats before)
   useEffect(() => {
-    if (!voiceAnnouncementsEnabled || !isPlaying || !currentSection) {
+    if (!voiceAnnouncementsEnabled || !isPlaying || !upcomingSection) {
       return;
     }
 
-    const sectionKey = `${currentSection.id}-${currentSection.type}`;
+    const sectionKey = `${upcomingSection.id}-${upcomingSection.type}`;
     
     if (lastAnnouncedSectionRef.current !== sectionKey) {
       lastAnnouncedSectionRef.current = sectionKey;
-      const sectionName = sectionNames[currentSection.type];
+      const sectionName = sectionNames[upcomingSection.type];
       speakSection(sectionName);
     }
-  }, [currentSection, isPlaying, voiceAnnouncementsEnabled]);
+  }, [upcomingSection, isPlaying, voiceAnnouncementsEnabled]);
 
   // Reset announced section when song changes or stops
   useEffect(() => {
@@ -161,6 +172,7 @@ export default function Index() {
       lastAnnouncedSectionRef.current = null;
     }
   }, [isPlaying, currentSongId]);
+
   // Simulate playback for demo songs only
   useEffect(() => {
     if (!demoIsPlaying || !currentSong || isImportedSong) return;
