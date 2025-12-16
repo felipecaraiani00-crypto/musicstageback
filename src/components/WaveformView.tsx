@@ -40,9 +40,20 @@ export function WaveformView({
 
   // Auto-scroll to keep playhead visible
   useEffect(() => {
-    if (containerRef.current && isPlaying) {
-      const container = containerRef.current;
-      const scrollPosition = (progressPercent / 100) * container.scrollWidth - container.clientWidth / 2;
+    if (!containerRef.current) return;
+    
+    const container = containerRef.current;
+    const playheadPosition = (progressPercent / 100) * container.scrollWidth;
+    const viewStart = container.scrollLeft;
+    const viewEnd = container.scrollLeft + container.clientWidth;
+    
+    // Check if playhead is outside visible area (with some margin)
+    const margin = container.clientWidth * 0.15;
+    const isOutOfView = playheadPosition < viewStart + margin || playheadPosition > viewEnd - margin;
+    
+    if (isPlaying && isOutOfView) {
+      // Center the playhead in the view
+      const scrollPosition = playheadPosition - container.clientWidth / 2;
       container.scrollTo({ left: Math.max(0, scrollPosition), behavior: "smooth" });
     }
   }, [currentTime, isPlaying, progressPercent]);
