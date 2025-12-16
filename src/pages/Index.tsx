@@ -39,8 +39,14 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// Empty library - songs are loaded from cloud
-const demoSongs: Song[] = [];
+// All available songs in library (demo data)
+const demoSongs: Song[] = [
+  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
+  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
+  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
+  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
+  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
+];
 
 const BEATS_PER_BAR = 4;
 
@@ -115,9 +121,9 @@ export default function Index() {
   }, [setStereoSplit]);
   
   // Library & Setlist state - use cloud data when authenticated
-  const [librarySongs, setLibrarySongs] = useState<Song[]>([]);
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
-  const [currentSongId, setCurrentSongId] = useState<string>("");
+  const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["demo-1", "demo-2", "demo-3"]);
+  const [currentSongId, setCurrentSongId] = useState<string>("demo-1");
 
   // Song sections state - use cloud data when authenticated
   const [localSongSections, setLocalSongSections] = useState<Map<string, SongSection[]>>(new Map());
@@ -454,25 +460,8 @@ export default function Index() {
 
   if (!currentSong) {
     return (
-      <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <Music className="w-12 h-12 text-muted-foreground/50" />
-        <p className="text-muted-foreground">Nenhuma música importada</p>
-        <button 
-          onClick={() => setShowImport(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium"
-        >
-          <Music className="w-4 h-4" />
-          Importar Músicas
-        </button>
-        
-        {showImport && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-            <ImportMusic
-              onClose={() => setShowImport(false)}
-              onImport={handleImportSongs}
-            />
-          </div>
-        )}
+      <div className="h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
       </div>
     );
   }
