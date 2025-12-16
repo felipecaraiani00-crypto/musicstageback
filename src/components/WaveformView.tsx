@@ -122,12 +122,13 @@ export function WaveformView({
           style={{ width: "100%", height: "100%" }}
         />
         
-        {/* Playhead */}
+        {/* Playhead - Orange needle */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg pointer-events-none transition-all duration-100"
+          className="absolute top-0 bottom-0 w-1 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.9)] pointer-events-none z-10"
           style={{ left: `${progressPercent}%` }}
         >
-          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-2 h-2 bg-accent rotate-45" />
+          <div className="absolute top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-orange-500 rotate-45" />
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-orange-500 rotate-45" />
         </div>
       </div>
     </div>
