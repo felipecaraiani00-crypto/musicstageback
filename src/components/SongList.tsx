@@ -1,12 +1,14 @@
-import { Music, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// UI Song format - can represent both imported songs and legacy songs
 export interface Song {
   id: string;
   title: string;
-  artist: string;
+  artist?: string;
   duration: number; // seconds
   bpm: number;
+  trackCount?: number;
 }
 
 interface SongListProps {
@@ -66,9 +68,16 @@ export function SongList({ songs, currentSongId, onSongSelect }: SongListProps) 
                 )}>
                   {song.title}
                 </p>
-                <p className="text-[9px] text-muted-foreground truncate leading-tight">
-                  {song.artist}
-                </p>
+                {song.artist && (
+                  <p className="text-[9px] text-muted-foreground truncate leading-tight">
+                    {song.artist}
+                  </p>
+                )}
+                {song.trackCount && (
+                  <p className="text-[9px] text-muted-foreground truncate leading-tight">
+                    {song.trackCount} tracks
+                  </p>
+                )}
               </div>
 
               {/* Duration & BPM */}

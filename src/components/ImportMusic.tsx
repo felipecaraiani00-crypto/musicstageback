@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Upload, FileAudio, X, Plus, Loader2 } from "lucide-react";
+import { Upload, FileArchive, X, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Song } from "./SongList";
+import { importZipFile, ImportProgress } from "@/lib/zipImporter";
+import { Song } from "@/lib/audioEngine";
 
 interface ImportMusicProps {
   onImport: (songs: Song[]) => void;
@@ -13,7 +14,9 @@ interface ImportedFile {
   file: File;
   name: string;
   size: number;
-  trackCount: number;
+  status: 'pending' | 'importing' | 'complete' | 'error';
+  progress: ImportProgress | null;
+  error?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -30,12 +33,16 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     
-    const newFiles: ImportedFile[] = selectedFiles.map((file) => ({
+    // Filter only ZIP files
+    const zipFiles = selectedFiles.filter(f => f.name.toLowerCase().endsWith('.zip'));
+    
+    const newFiles: ImportedFile[] = zipFiles.map((file) => ({
       id: crypto.randomUUID(),
       file,
-      name: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
+      name: file.name.replace(/\.zip$/i, ""), // Song name from ZIP filename
       size: file.size,
-      trackCount: Math.floor(Math.random() * 8) + 6, // Simulated 6-13 tracks
+      status: 'pending',
+      progress: null,
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -48,25 +55,71 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
 
   const handleImport = async () => {
     setIsImporting(true);
-    
-    // Simulate import process
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const importedSongs: Song[] = [];
 
-    const newSongs: Song[] = files.map((f) => ({
-      id: crypto.randomUUID(),
-      title: f.name,
-      artist: "Importado",
-      duration: Math.floor(Math.random() * 180) + 180, // 3-6 min
-      bpm: Math.floor(Math.random() * 60) + 60, // 60-120 bpm
-    }));
+    for (const fileItem of files) {
+      // Update status to importing
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileItem.id ? { ...f, status: 'importing' as const } : f
+        )
+      );
 
-    onImport(newSongs);
+      // Process ZIP file
+      const result = await importZipFile(fileItem.file, (progress) => {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileItem.id ? { ...f, progress } : f
+          )
+        );
+      });
+
+      if (result.success && result.song) {
+        importedSongs.push(result.song);
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileItem.id ? { ...f, status: 'complete' as const } : f
+          )
+        );
+      } else {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileItem.id
+              ? { ...f, status: 'error' as const, error: result.error }
+              : f
+          )
+        );
+      }
+    }
+
+    if (importedSongs.length > 0) {
+      onImport(importedSongs);
+    }
+
     setIsImporting(false);
-    onClose();
+    
+    // Close if all successful
+    const hasErrors = files.some(f => f.status === 'error');
+    if (!hasErrors && importedSongs.length > 0) {
+      onClose();
+    }
   };
 
   const totalSize = files.reduce((acc, f) => acc + f.size, 0);
   const maxSize = 200 * 1024 * 1024; // 200 MB
+
+  const getStatusIcon = (status: ImportedFile['status']) => {
+    switch (status) {
+      case 'importing':
+        return <Loader2 className="w-4 h-4 animate-spin text-primary" />;
+      case 'complete':
+        return <span className="text-green-500">✓</span>;
+      case 'error':
+        return <span className="text-destructive">✗</span>;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col">
@@ -74,7 +127,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
       <header className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Upload className="w-5 h-5 text-primary" />
-          <h2 className="text-base font-semibold">Importar Músicas</h2>
+          <h2 className="text-base font-semibold">Importar Músicas (ZIP)</h2>
         </div>
         <button
           onClick={onClose}
@@ -87,7 +140,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
       {/* Info */}
       <div className="px-4 py-3 border-b border-border bg-secondary/30">
         <p className="text-xs text-muted-foreground">
-          Importe arquivos de áudio com até 13 tracks. Tamanho máximo: 200 MB por sessão.
+          Importe arquivos ZIP contendo as tracks de áudio (.wav, .mp3). O nome do ZIP será o nome da música.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
@@ -110,37 +163,57 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
         {files.map((file) => (
           <div
             key={file.id}
-            className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+            className={cn(
+              "flex items-center gap-3 p-3 rounded-lg bg-secondary/50",
+              file.status === 'error' && "border border-destructive/50"
+            )}
           >
-            <FileAudio className="w-8 h-8 text-primary" />
+            <FileArchive className="w-8 h-8 text-primary" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{file.name}</p>
               <p className="text-xs text-muted-foreground">
-                {formatFileSize(file.size)} • {file.trackCount} tracks
+                {formatFileSize(file.size)}
+                {file.progress && file.status === 'importing' && (
+                  <span className="ml-2">
+                    • {file.progress.stage === 'extracting' ? 'Extraindo' : 'Decodificando'}: {file.progress.progress}%
+                  </span>
+                )}
+                {file.error && (
+                  <span className="text-destructive ml-2">• {file.error}</span>
+                )}
               </p>
             </div>
-            <button
-              onClick={() => removeFile(file.id)}
-              className="p-1.5 rounded hover:bg-destructive/20 transition-colors"
-            >
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
+            <div className="flex items-center gap-2">
+              {getStatusIcon(file.status)}
+              {file.status === 'pending' && (
+                <button
+                  onClick={() => removeFile(file.id)}
+                  className="p-1.5 rounded hover:bg-destructive/20 transition-colors"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
           </div>
         ))}
 
         {/* Add more */}
         <button
           onClick={() => inputRef.current?.click()}
-          className="w-full flex items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors text-muted-foreground hover:text-primary"
+          disabled={isImporting}
+          className={cn(
+            "w-full flex items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors text-muted-foreground hover:text-primary",
+            isImporting && "opacity-50 cursor-not-allowed"
+          )}
         >
           <Plus className="w-5 h-5" />
-          <span className="text-sm">Adicionar arquivos</span>
+          <span className="text-sm">Adicionar arquivos ZIP</span>
         </button>
 
         <input
           ref={inputRef}
           type="file"
-          accept="audio/*,.wav,.mp3,.aiff,.flac"
+          accept=".zip"
           multiple
           onChange={handleFileSelect}
           className="hidden"
