@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Music } from 'lucide-react';
+import { Music, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +17,9 @@ export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showEmailSent, setShowEmailSent] = useState(false);
   const { signIn, signUp, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -36,6 +38,12 @@ export default function Auth() {
       toast.error(validation.error.errors[0].message);
       return;
     }
+
+    // Check password confirmation for signup
+    if (!isLogin && password !== confirmPassword) {
+      toast.error('As senhas não conferem');
+      return;
+    }
     
     setIsSubmitting(true);
 
@@ -45,6 +53,8 @@ export default function Auth() {
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
             toast.error('Email ou senha incorretos');
+          } else if (error.message.includes('Email not confirmed')) {
+            toast.error('Email não confirmado. Verifique sua caixa de entrada.');
           } else {
             toast.error(error.message);
           }
@@ -61,8 +71,8 @@ export default function Auth() {
             toast.error(error.message);
           }
         } else {
-          toast.success('Conta criada com sucesso!');
-          navigate('/', { replace: true });
+          // Show email confirmation message
+          setShowEmailSent(true);
         }
       }
     } finally {
@@ -74,6 +84,51 @@ export default function Auth() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-primary">Carregando...</div>
+      </div>
+    );
+  }
+
+  // Email sent confirmation screen
+  if (showEmailSent) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <Mail className="w-8 h-8 text-primary" />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-xl font-bold text-foreground">Verifique seu email</h1>
+            <p className="text-sm text-muted-foreground">
+              Enviamos um link de confirmação para:
+            </p>
+            <p className="text-sm font-medium text-foreground">{email}</p>
+          </div>
+
+          <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Clique no link enviado para confirmar seu email e ativar sua conta.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Não recebeu? Verifique a pasta de spam.
+            </p>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => {
+              setShowEmailSent(false);
+              setIsLogin(true);
+              setPassword('');
+              setConfirmPassword('');
+            }}
+          >
+            Voltar para login
+          </Button>
+        </div>
       </div>
     );
   }
@@ -122,10 +177,30 @@ export default function Auth() {
             />
           </div>
 
+          {/* Confirm password field - only show for signup */}
+          {!isLogin && (
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmar senha</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="new-password"
+                className="bg-background"
+              />
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-xs text-destructive">As senhas não conferem</p>
+              )}
+            </div>
+          )}
+
           <Button 
             type="submit" 
             className="w-full" 
-            disabled={isSubmitting}
+            disabled={isSubmitting || (!isLogin && password !== confirmPassword)}
           >
             {isSubmitting ? 'Carregando...' : isLogin ? 'Entrar' : 'Criar conta'}
           </Button>
@@ -136,7 +211,10 @@ export default function Auth() {
           {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}{' '}
           <button
             type="button"
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setConfirmPassword('');
+            }}
             className="text-primary hover:underline font-medium"
           >
             {isLogin ? 'Criar conta' : 'Entrar'}
