@@ -1,22 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Settings, Music, List } from "lucide-react";
 import { TransportControls } from "@/components/TransportControls";
-import { SongStructure, Section } from "@/components/SongStructure";
+import { SongViewer } from "@/components/SongViewer";
 import { TrackMixer, Track } from "@/components/TrackMixer";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
-
-// Demo song data
-const demoSections: Section[] = [
-  { id: "1", type: "intro", label: "Intro", duration: 16, startTime: 0 },
-  { id: "2", type: "verse", label: "Verse 1", duration: 32, startTime: 16 },
-  { id: "3", type: "chorus", label: "Chorus", duration: 24, startTime: 48 },
-  { id: "4", type: "verse", label: "Verse 2", duration: 32, startTime: 72 },
-  { id: "5", type: "chorus", label: "Chorus", duration: 24, startTime: 104 },
-  { id: "6", type: "bridge", label: "Bridge", duration: 16, startTime: 128 },
-  { id: "7", type: "chorus", label: "Final Chorus", duration: 32, startTime: 144 },
-  { id: "8", type: "outro", label: "Outro", duration: 16, startTime: 176 },
-];
 
 const initialTracks: Track[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80, isMuted: false, isSolo: false, level: 0 },
@@ -101,33 +89,15 @@ export default function Index() {
   }, []);
 
   const handlePrev = useCallback(() => {
-    const currentSection = demoSections.find(
-      (s) => currentTime >= s.startTime && currentTime < s.startTime + s.duration
-    );
-    if (!currentSection) return;
-
-    const currentIndex = demoSections.findIndex((s) => s.id === currentSection.id);
-    if (currentIndex > 0) {
-      setCurrentTime(demoSections[currentIndex - 1].startTime);
-    } else {
-      setCurrentTime(0);
-    }
-  }, [currentTime]);
+    setCurrentTime((prev) => Math.max(0, prev - 10));
+  }, []);
 
   const handleNext = useCallback(() => {
-    const currentSection = demoSections.find(
-      (s) => currentTime >= s.startTime && currentTime < s.startTime + s.duration
-    );
-    if (!currentSection) return;
+    setCurrentTime((prev) => Math.min(TOTAL_DURATION, prev + 10));
+  }, []);
 
-    const currentIndex = demoSections.findIndex((s) => s.id === currentSection.id);
-    if (currentIndex < demoSections.length - 1) {
-      setCurrentTime(demoSections[currentIndex + 1].startTime);
-    }
-  }, [currentTime]);
-
-  const handleSectionClick = useCallback((section: Section) => {
-    setCurrentTime(section.startTime);
+  const handleSeek = useCallback((time: number) => {
+    setCurrentTime(time);
   }, []);
 
   const handleVolumeChange = useCallback((trackId: string, volume: number) => {
@@ -147,6 +117,15 @@ export default function Index() {
       prev.map((t) => (t.id === trackId ? { ...t, isSolo: !t.isSolo } : t))
     );
   }, []);
+
+  // Convert tracks for faders view
+  const faderTracks = tracks.map((t) => ({
+    id: t.id,
+    name: t.name,
+    icon: t.icon,
+    color: t.color,
+    volume: t.volume,
+  }));
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -174,13 +153,15 @@ export default function Index() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 space-y-4 overflow-auto">
-        {/* Song Structure */}
-        <SongStructure
-          sections={demoSections}
+      <main className="flex-1 p-4 space-y-4 overflow-y-auto min-h-0">
+        {/* Song Viewer (Waveform / Faders toggle) */}
+        <SongViewer
           currentTime={currentTime}
           totalDuration={TOTAL_DURATION}
-          onSectionClick={handleSectionClick}
+          isPlaying={isPlaying}
+          onSeek={handleSeek}
+          tracks={faderTracks}
+          onVolumeChange={handleVolumeChange}
         />
 
         {/* Track Mixer */}
