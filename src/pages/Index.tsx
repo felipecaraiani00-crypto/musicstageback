@@ -8,6 +8,7 @@ import { SongList, Song } from "@/components/SongList";
 import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
+import { SectionEditor, SongSection } from "@/components/SectionEditor";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { Song as AudioSong } from "@/lib/audioEngine";
@@ -87,6 +88,10 @@ export default function Index() {
   const [showSettings, setShowSettings] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showSectionEditor, setShowSectionEditor] = useState(false);
+  
+  // Song sections state (stored per song)
+  const [songSections, setSongSections] = useState<Map<string, SongSection[]>>(new Map());
 
   // Merge demo songs with imported audio engine songs
   const allLibrarySongs: Song[] = [
@@ -354,6 +359,7 @@ export default function Index() {
         onClose={() => setShowSettings(false)}
         onOpenLibrary={() => setShowLibrary(true)}
         onOpenImport={() => setShowImport(true)}
+        onOpenSectionEditor={() => setShowSectionEditor(true)}
       />
 
       {/* Main Content - Landscape Layout */}
@@ -421,6 +427,26 @@ export default function Index() {
         <ImportMusic
           onImport={handleImportSongs}
           onClose={() => setShowImport(false)}
+        />
+      )}
+
+      {/* Section Editor Modal */}
+      {showSectionEditor && currentSong && (
+        <SectionEditor
+          songId={currentSong.id}
+          songName={currentSong.title}
+          duration={currentSong.duration}
+          currentTime={currentTime}
+          sections={songSections.get(currentSong.id) || []}
+          onSectionsChange={(sections) => {
+            setSongSections(prev => {
+              const newMap = new Map(prev);
+              newMap.set(currentSong.id, sections);
+              return newMap;
+            });
+          }}
+          onSeek={handleSeek}
+          onClose={() => setShowSectionEditor(false)}
         />
       )}
     </div>
