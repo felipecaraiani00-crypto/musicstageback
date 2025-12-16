@@ -467,6 +467,18 @@ export default function Index() {
     );
   }
 
+  // Show loading while demo is being created
+  if (!demoLoaded && audioEngineSongs.length === 0) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Music className="w-5 h-5 animate-pulse" />
+          <span>Carregando música demo...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentSong) {
     return (
       <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
