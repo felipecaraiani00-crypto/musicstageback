@@ -70,6 +70,7 @@ export default function Index() {
     saveSong,
     updateSetlist,
     saveSections,
+    deleteSong,
   } = useCloudSync(user?.id);
 
   // Local state for demo songs
@@ -506,6 +507,7 @@ export default function Index() {
             songs={allLibrarySongs}
             selectedIds={selectedSongIds}
             onToggleSelect={handleToggleLibrarySong}
+            onDelete={deleteSong}
             onClose={() => setShowLibrary(false)}
           />
         )}
@@ -649,6 +651,7 @@ export default function Index() {
           songs={allLibrarySongs}
           selectedIds={selectedSongIds}
           onToggleSelect={handleToggleLibrarySong}
+          onDelete={deleteSong}
           onClose={() => setShowLibrary(false)}
         />
       )}

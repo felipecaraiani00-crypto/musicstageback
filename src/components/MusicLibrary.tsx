@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Music, Check, Plus, Search } from "lucide-react";
+import { Music, Check, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Song } from "./SongList";
 
@@ -7,6 +7,7 @@ interface MusicLibraryProps {
   songs: Song[];
   selectedIds: string[];
   onToggleSelect: (songId: string) => void;
+  onDelete?: (songId: string) => void;
   onClose: () => void;
 }
 
@@ -16,8 +17,9 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: MusicLibraryProps) {
+export function MusicLibrary({ songs, selectedIds, onToggleSelect, onDelete, onClose }: MusicLibraryProps) {
   const [search, setSearch] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredSongs = songs.filter(
     (song) =>
@@ -26,6 +28,17 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
   );
 
   const selectedCount = selectedIds.length;
+
+  const handleDelete = async (e: React.MouseEvent, songId: string) => {
+    e.stopPropagation();
+    if (!onDelete) return;
+    
+    if (confirm("Tem certeza que deseja excluir esta música?")) {
+      setDeletingId(songId);
+      await onDelete(songId);
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col">
@@ -61,48 +74,64 @@ export function MusicLibrary({ songs, selectedIds, onToggleSelect, onClose }: Mu
       <div className="flex-1 overflow-y-auto p-3 space-y-1">
         {filteredSongs.map((song) => {
           const isSelected = selectedIds.includes(song.id);
+          const isDeleting = deletingId === song.id;
 
           return (
-            <button
+            <div
               key={song.id}
-              onClick={() => onToggleSelect(song.id)}
               className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left",
+                "w-full flex items-center gap-3 p-3 rounded-lg transition-all",
                 isSelected
                   ? "bg-primary/20 border border-primary/50"
-                  : "bg-secondary/30 hover:bg-secondary/50 border border-transparent"
+                  : "bg-secondary/30 hover:bg-secondary/50 border border-transparent",
+                isDeleting && "opacity-50 pointer-events-none"
               )}
             >
               {/* Checkbox */}
-              <div
+              <button
+                onClick={() => onToggleSelect(song.id)}
                 className={cn(
-                  "w-6 h-6 rounded-md flex items-center justify-center border-2 transition-all",
+                  "w-6 h-6 rounded-md flex items-center justify-center border-2 transition-all flex-shrink-0",
                   isSelected
                     ? "bg-primary border-primary"
-                    : "border-muted-foreground/50"
+                    : "border-muted-foreground/50 hover:border-primary/50"
                 )}
               >
                 {isSelected && <Check className="w-4 h-4 text-primary-foreground" />}
-              </div>
+              </button>
 
               {/* Song info */}
-              <div className="flex-1 min-w-0">
+              <button
+                onClick={() => onToggleSelect(song.id)}
+                className="flex-1 min-w-0 text-left"
+              >
                 <p className={cn("text-sm font-medium truncate", isSelected && "text-primary")}>
                   {song.title}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {song.artist || (song.trackCount ? `${song.trackCount} tracks` : '')}
                 </p>
-              </div>
+              </button>
 
               {/* Duration & BPM */}
-              <div className="text-right">
+              <div className="text-right flex-shrink-0">
                 <p className="text-xs font-mono text-muted-foreground">
                   {formatDuration(song.duration)}
                 </p>
                 <p className="text-xs font-mono text-muted-foreground">{song.bpm} bpm</p>
               </div>
-            </button>
+
+              {/* Delete button */}
+              {onDelete && (
+                <button
+                  onClick={(e) => handleDelete(e, song.id)}
+                  className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                  title="Excluir música"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           );
         })}
 
