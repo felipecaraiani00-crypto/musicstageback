@@ -1,4 +1,4 @@
-import { Volume2, Music, VolumeX, Mic, MicOff } from "lucide-react";
+import { Volume2, Music, VolumeX, Mic, MicOff, Headphones } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
@@ -12,9 +12,11 @@ interface MasterControlsProps {
   isFadeRestoring: boolean;
   fadeProgress: number;
   voiceEnabled: boolean;
+  stereoSplit: number; // -1 = click left, 0 = center, 1 = click right
   onMasterVolumeChange: (volume: number) => void;
   onFadeToClickToggle: () => void;
   onVoiceToggle: () => void;
+  onStereoSplitChange: (side: number) => void;
 }
 
 export function MasterControls({
@@ -27,10 +29,28 @@ export function MasterControls({
   isFadeRestoring,
   fadeProgress,
   voiceEnabled,
+  stereoSplit,
   onMasterVolumeChange,
   onFadeToClickToggle,
   onVoiceToggle,
+  onStereoSplitChange,
 }: MasterControlsProps) {
+  // Cycle through stereo modes: center -> click left -> click right -> center
+  const handleStereoClick = () => {
+    if (stereoSplit === 0) {
+      onStereoSplitChange(-1); // Click left
+    } else if (stereoSplit === -1) {
+      onStereoSplitChange(1); // Click right
+    } else {
+      onStereoSplitChange(0); // Center
+    }
+  };
+
+  const getStereoLabel = () => {
+    if (stereoSplit === -1) return "L|R";
+    if (stereoSplit === 1) return "R|L";
+    return "STEREO";
+  };
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
       {/* BPM Display */}
@@ -110,7 +130,21 @@ export function MasterControls({
         </span>
       </button>
 
-      {/* Voice Announcement Toggle */}
+      {/* Stereo Split Button */}
+      <button
+        onClick={handleStereoClick}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-2 rounded-lg font-medium text-xs transition-all",
+          stereoSplit !== 0
+            ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+            : "bg-secondary hover:bg-secondary/80 text-muted-foreground"
+        )}
+        title={stereoSplit === -1 ? "Click esquerda, Instrumentos direita" : stereoSplit === 1 ? "Click direita, Instrumentos esquerda" : "Separação estéreo desativada"}
+      >
+        <Headphones className="w-4 h-4" />
+        <span className="hidden sm:inline">{getStereoLabel()}</span>
+      </button>
+
       <button
         onClick={onVoiceToggle}
         className={cn(

@@ -49,6 +49,16 @@ export function useAudioEngine() {
     return audioEngine.toggleTrackSolo(trackId);
   }, []);
 
+  // Handle track pan
+  const handleTrackPan = useCallback((trackId: string, pan: number) => {
+    audioEngine.setTrackPan(trackId, pan);
+  }, []);
+
+  // Set stereo split (click on one side, instruments on other)
+  const setStereoSplit = useCallback((side: number) => {
+    audioEngine.setStereoSplit(side);
+  }, []);
+
   // Set master volume (0-100)
   const setMasterVolume = useCallback((volume: number) => {
     audioEngine.setMasterVolume(volume / 100);
@@ -111,6 +121,8 @@ export function useAudioEngine() {
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     handleTrackSoloToggle,
+    handleTrackPan,
+    setStereoSplit,
     setMasterVolume,
     setCurrentSong,
     

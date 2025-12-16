@@ -5,9 +5,11 @@ export interface Track {
   trackName: string;
   audioBuffer: AudioBuffer | null;
   volume: number; // 0.0 to 1.0
+  pan: number; // -1.0 (left) to 1.0 (right)
   isMuted: boolean;
   isSolo: boolean;
   gainNode: GainNode | null;
+  panNode: StereoPannerNode | null;
   sourceNode: AudioBufferSourceNode | null;
 }
 
@@ -31,6 +33,7 @@ class AudioEngine {
   private masterGainNode: GainNode | null = null;
   private songs: Map<string, Song> = new Map();
   private trackGainNodes: Map<string, GainNode> = new Map();
+  private trackPanNodes: Map<string, StereoPannerNode> = new Map();
   private currentSongId: string | null = null;
   private listeners: Set<(state: AudioEngineState) => void> = new Set();
   
@@ -94,13 +97,22 @@ class AudioEngine {
   addSong(song: Song): void {
     const context = this.ensureContext();
     
-    // Create gain nodes for each track
+    // Create gain and pan nodes for each track
     song.tracks.forEach(track => {
       const gainNode = context.createGain();
       gainNode.gain.value = track.volume;
-      gainNode.connect(this.masterGainNode!);
+      
+      const panNode = context.createStereoPanner();
+      panNode.pan.value = track.pan || 0;
+      
+      // Connect: gain -> pan -> master
+      gainNode.connect(panNode);
+      panNode.connect(this.masterGainNode!);
+      
       track.gainNode = gainNode;
+      track.panNode = panNode;
       this.trackGainNodes.set(track.trackId, gainNode);
+      this.trackPanNodes.set(track.trackId, panNode);
     });
 
     this.songs.set(song.id, song);
@@ -122,12 +134,16 @@ class AudioEngine {
         this.stop();
       }
       
-      // Cleanup gain nodes
+      // Cleanup gain and pan nodes
       song.tracks.forEach(track => {
         if (track.gainNode) {
           track.gainNode.disconnect();
         }
+        if (track.panNode) {
+          track.panNode.disconnect();
+        }
         this.trackGainNodes.delete(track.trackId);
+        this.trackPanNodes.delete(track.trackId);
       });
       this.songs.delete(songId);
       
@@ -398,6 +414,52 @@ class AudioEngine {
     if (this.masterGainNode) {
       this.masterGainNode.gain.setValueAtTime(clampedVolume, this.audioContext?.currentTime || 0);
     }
+  }
+
+  // ========== PAN CONTROLS ==========
+
+  // Set track pan (-1.0 = left, 0 = center, 1.0 = right)
+  setTrackPan(trackId: string, pan: number): void {
+    const clampedPan = Math.max(-1, Math.min(1, pan));
+    
+    for (const song of this.songs.values()) {
+      const track = song.tracks.find(t => t.trackId === trackId);
+      if (track) {
+        track.pan = clampedPan;
+        
+        if (track.panNode) {
+          track.panNode.pan.setValueAtTime(clampedPan, this.audioContext?.currentTime || 0);
+        }
+        
+        this.notifyListeners();
+        return;
+      }
+    }
+  }
+
+  // Set stereo split: click on one side, instruments on other
+  // side: -1 = click left, 1 = click right, 0 = disable (center all)
+  setStereoSplit(side: number): void {
+    const song = this.getCurrentSong();
+    if (!song) return;
+
+    song.tracks.forEach(track => {
+      const trackNameLower = track.trackName.toLowerCase();
+      const isClickTrack = trackNameLower.includes('click') || trackNameLower.includes('metron') || trackNameLower.includes('guia');
+      
+      let pan = 0;
+      if (side !== 0) {
+        // Click goes to specified side, instruments go to opposite
+        pan = isClickTrack ? side : -side;
+      }
+      
+      track.pan = pan;
+      if (track.panNode) {
+        track.panNode.pan.setValueAtTime(pan, this.audioContext?.currentTime || 0);
+      }
+    });
+
+    this.notifyListeners();
   }
 
   // ========== AUDIO DECODING ==========
