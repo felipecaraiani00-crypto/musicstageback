@@ -9,6 +9,7 @@ import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { SectionEditor, SongSection } from "@/components/SectionEditor";
+import { CurrentSectionIndicator } from "@/components/CurrentSectionIndicator";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { Song as AudioSong } from "@/lib/audioEngine";
@@ -341,6 +342,13 @@ export default function Index() {
             </p>
           </div>
         </div>
+
+        {/* Current Section Indicator */}
+        <CurrentSectionIndicator
+          sections={songSections.get(currentSong.id) || []}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+        />
 
         <div className="flex items-center gap-2">
           <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
