@@ -175,7 +175,8 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
                 {formatFileSize(file.size)}
                 {file.progress && file.status === 'importing' && (
                   <span className="ml-2">
-                    • {file.progress.stage === 'extracting' ? 'Extraindo' : 'Decodificando'}: {file.progress.progress}%
+                    • {file.progress.stage === 'extracting' ? 'Extraindo' : 
+                       file.progress.stage === 'analyzing' ? 'Detectando BPM' : 'Decodificando'}: {file.progress.progress}%
                   </span>
                 )}
                 {file.error && (
