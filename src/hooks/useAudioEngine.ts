@@ -48,20 +48,58 @@ export function useAudioEngine() {
     audioEngine.setCurrentSong(songId);
   }, []);
 
+  // Playback controls
+  const play = useCallback(() => {
+    audioEngine.play();
+  }, []);
+
+  const pause = useCallback(() => {
+    audioEngine.pause();
+  }, []);
+
+  const stop = useCallback(() => {
+    audioEngine.stop();
+  }, []);
+
+  const togglePlayPause = useCallback(() => {
+    audioEngine.togglePlayPause();
+  }, []);
+
+  const seek = useCallback((time: number) => {
+    audioEngine.seek(time);
+  }, []);
+
+  const skip = useCallback((seconds: number) => {
+    audioEngine.skip(seconds);
+  }, []);
+
   // Get current song's fader tracks
   const currentFaderTracks = state.currentSongId 
     ? getFaderTracks(state.currentSongId) 
     : [];
 
   return {
+    // State
     songs: state.songs,
     currentSongId: state.currentSongId,
     currentSong: state.currentSongId ? audioEngine.getSong(state.currentSongId) : undefined,
+    isPlaying: state.isPlaying,
+    currentTime: state.currentTime,
     currentFaderTracks,
+    
+    // Track controls
     getFaderTracks,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     setMasterVolume,
     setCurrentSong,
+    
+    // Playback controls
+    play,
+    pause,
+    stop,
+    togglePlayPause,
+    seek,
+    skip,
   };
 }
