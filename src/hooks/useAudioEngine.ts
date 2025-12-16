@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { audioEngine, Song, AudioEngineState } from '@/lib/audioEngine';
 import { FaderTrack } from '@/components/HorizontalFaders';
 import { getTrackIcon, getTrackColor } from '@/lib/zipImporter';
@@ -26,6 +26,11 @@ export function useAudioEngine() {
       volume: Math.round(track.volume * 100),
       isMuted: track.isMuted,
     }));
+  }, []);
+
+  // Get waveform data for a song
+  const getWaveformData = useCallback((songId: string, numPoints: number = 300): number[] => {
+    return audioEngine.getWaveformData(songId, numPoints);
   }, []);
 
   // Handle volume change from fader (converts 0-100 to 0-1)
@@ -78,6 +83,12 @@ export function useAudioEngine() {
     ? getFaderTracks(state.currentSongId) 
     : [];
 
+  // Get current song's waveform data (memoized to prevent recalculation)
+  const currentWaveformData = useMemo(() => {
+    if (!state.currentSongId) return [];
+    return getWaveformData(state.currentSongId);
+  }, [state.currentSongId, state.songs.length, getWaveformData]);
+
   return {
     // State
     songs: state.songs,
@@ -86,9 +97,11 @@ export function useAudioEngine() {
     isPlaying: state.isPlaying,
     currentTime: state.currentTime,
     currentFaderTracks,
+    currentWaveformData,
     
     // Track controls
     getFaderTracks,
+    getWaveformData,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     setMasterVolume,

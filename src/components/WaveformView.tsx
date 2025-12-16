@@ -1,11 +1,11 @@
-import { useRef, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { useRef, useEffect, useMemo } from "react";
 
 interface WaveformViewProps {
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
   onSeek: (time: number) => void;
+  waveformData?: number[]; // Real waveform data from AudioBuffer
 }
 
 export function WaveformView({
@@ -13,26 +13,30 @@ export function WaveformView({
   totalDuration,
   isPlaying,
   onSeek,
+  waveformData: externalWaveformData,
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Generate fake waveform data
-  const generateWaveform = () => {
+  // Generate fake waveform data only if no real data provided
+  const fakeWaveformData = useMemo(() => {
     const points: number[] = [];
     const numPoints = 300;
     for (let i = 0; i < numPoints; i++) {
-      // Create varied wave heights for visual interest
       const base = 0.3 + Math.random() * 0.4;
       const variation = Math.sin(i * 0.1) * 0.2;
       const spike = Math.random() > 0.9 ? 0.3 : 0;
       points.push(Math.min(1, base + variation + spike));
     }
     return points;
-  };
+  }, []);
 
-  const waveformData = useRef(generateWaveform());
-  const progressPercent = (currentTime / totalDuration) * 100;
+  // Use external waveform data if available, otherwise use fake data
+  const waveformPoints = externalWaveformData && externalWaveformData.length > 0 
+    ? externalWaveformData 
+    : fakeWaveformData;
+
+  const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
 
   // Auto-scroll to keep playhead visible
   useEffect(() => {
@@ -60,13 +64,13 @@ export function WaveformView({
 
     const width = rect.width;
     const height = rect.height;
-    const barWidth = width / waveformData.current.length;
-    const playedBars = Math.floor((progressPercent / 100) * waveformData.current.length);
+    const barWidth = width / waveformPoints.length;
+    const playedBars = Math.floor((progressPercent / 100) * waveformPoints.length);
 
     ctx.clearRect(0, 0, width, height);
 
-    waveformData.current.forEach((value, i) => {
-      const barHeight = value * (height * 0.8);
+    waveformPoints.forEach((value, i) => {
+      const barHeight = Math.max(2, value * (height * 0.85));
       const x = i * barWidth;
       const y = (height - barHeight) / 2;
 
@@ -77,9 +81,9 @@ export function WaveformView({
         ctx.fillStyle = "hsl(220, 15%, 30%)";
       }
 
-      ctx.fillRect(x, y, barWidth - 1, barHeight);
+      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
     });
-  }, [progressPercent]);
+  }, [progressPercent, waveformPoints]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;

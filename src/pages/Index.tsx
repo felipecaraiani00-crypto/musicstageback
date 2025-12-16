@@ -58,6 +58,7 @@ export default function Index() {
     songs: audioEngineSongs, 
     currentSongId: audioCurrentSongId,
     currentFaderTracks,
+    currentWaveformData,
     isPlaying: engineIsPlaying,
     currentTime: engineCurrentTime,
     handleTrackVolumeChange,
@@ -297,6 +298,7 @@ export default function Index() {
             tracks={activeTracks}
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
+            waveformData={isImportedSong ? currentWaveformData : undefined}
           />
         </div>
 
