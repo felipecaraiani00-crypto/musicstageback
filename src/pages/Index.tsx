@@ -473,6 +473,7 @@ export default function Index() {
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
           isFadingToClick={isFadingToClick}
+          isFadeRestoring={isFadeRestoring}
           fadeProgress={fadeProgress}
           voiceEnabled={voiceAnnouncementsEnabled}
           onMasterVolumeChange={setMasterVolume}

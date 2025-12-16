@@ -9,6 +9,7 @@ interface MasterControlsProps {
   currentBeat: number;
   beatsPerBar: number;
   isFadingToClick: boolean;
+  isFadeRestoring: boolean;
   fadeProgress: number;
   voiceEnabled: boolean;
   onMasterVolumeChange: (volume: number) => void;
@@ -23,6 +24,7 @@ export function MasterControls({
   currentBeat,
   beatsPerBar,
   isFadingToClick,
+  isFadeRestoring,
   fadeProgress,
   voiceEnabled,
   onMasterVolumeChange,
@@ -65,21 +67,31 @@ export function MasterControls({
         onClick={onFadeToClickToggle}
         className={cn(
           "relative flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all overflow-hidden",
-          isFadingToClick || fadeProgress > 0
-            ? "bg-accent text-accent-foreground"
-            : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+          isFadeRestoring
+            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+            : isFadingToClick || fadeProgress > 0
+              ? "bg-accent text-accent-foreground"
+              : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
         )}
       >
         <div 
-          className="absolute inset-0 bg-accent/30 transition-all duration-100"
+          className="absolute inset-0 transition-all duration-100"
           style={{ 
             width: `${fadeProgress}%`,
-            opacity: fadeProgress > 0 ? 1 : 0
+            opacity: fadeProgress > 0 ? 1 : 0,
+            background: isFadeRestoring 
+              ? 'linear-gradient(90deg, transparent, hsl(142 76% 36% / 0.3))' 
+              : 'hsl(var(--accent) / 0.3)'
           }}
         />
         
         <span className="relative z-10 flex items-center gap-1.5">
-          {fadeProgress >= 100 ? (
+          {isFadeRestoring ? (
+            <>
+              <Volume2 className="w-4 h-4 animate-pulse" />
+              <span>RESTORE {Math.round(100 - fadeProgress)}%</span>
+            </>
+          ) : fadeProgress >= 100 ? (
             <>
               <VolumeX className="w-4 h-4" />
               <span>SÓ CLICK</span>
