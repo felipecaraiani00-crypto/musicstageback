@@ -49,9 +49,13 @@ export default function Index() {
   const [demoCurrentTime, setDemoCurrentTime] = useState(0);
   const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
-  const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
+  
+  // Fade to click state
+  const [isFadingToClick, setIsFadingToClick] = useState(false);
+  const [fadeProgress, setFadeProgress] = useState(0);
+  const [savedVolumes, setSavedVolumes] = useState<Map<string, number>>(new Map());
   
   // Audio Engine integration
   const { 
@@ -134,6 +138,64 @@ export default function Index() {
 
     return () => clearInterval(interval);
   }, [isPlaying, currentSong]);
+
+  // Fade to click effect - gradually fade instruments
+  useEffect(() => {
+    if (!isFadingToClick && fadeProgress === 0) return;
+    if (!isFadingToClick && fadeProgress >= 100) return;
+
+    const fadeSpeed = isFadingToClick ? 2 : -4; // Fade out slower, restore faster
+    const interval = setInterval(() => {
+      setFadeProgress(prev => {
+        const next = prev + fadeSpeed;
+        if (next <= 0) {
+          setIsFadingToClick(false);
+          return 0;
+        }
+        if (next >= 100) {
+          return 100;
+        }
+        return next;
+      });
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [isFadingToClick, fadeProgress]);
+
+  // Apply fade to track volumes
+  useEffect(() => {
+    if (!isImportedSong) return;
+    
+    const fadeMultiplier = 1 - (fadeProgress / 100);
+    
+    activeTracks.forEach(track => {
+      const trackNameLower = track.name.toLowerCase();
+      const isClickTrack = trackNameLower.includes('click') || trackNameLower.includes('metron');
+      
+      if (!isClickTrack) {
+        // Get saved volume or current volume
+        const baseVolume = savedVolumes.get(track.id) ?? track.volume;
+        const newVolume = Math.round(baseVolume * fadeMultiplier);
+        handleTrackVolumeChange(track.id, newVolume);
+      }
+    });
+  }, [fadeProgress, isImportedSong]);
+
+  // Handle fade to click toggle
+  const handleFadeToClickToggle = useCallback(() => {
+    if (fadeProgress === 0) {
+      // Starting fade - save current volumes
+      const volumes = new Map<string, number>();
+      activeTracks.forEach(track => {
+        volumes.set(track.id, track.volume);
+      });
+      setSavedVolumes(volumes);
+      setIsFadingToClick(true);
+    } else {
+      // Restoring - start fade back
+      setIsFadingToClick(false);
+    }
+  }, [fadeProgress, activeTracks]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
@@ -325,14 +387,14 @@ export default function Index() {
       <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-1 flex items-center justify-between gap-4">
         <MasterControls
           masterVolume={masterVolume}
-          clickVolume={clickVolume}
           bpm={currentSong.bpm}
           isClickActive={isClickActive}
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
+          isFadingToClick={isFadingToClick}
+          fadeProgress={fadeProgress}
           onMasterVolumeChange={setMasterVolume}
-          onClickVolumeChange={setClickVolume}
-          onClickToggle={() => setIsClickActive((prev) => !prev)}
+          onFadeToClickToggle={handleFadeToClickToggle}
         />
 
         <TransportControls
