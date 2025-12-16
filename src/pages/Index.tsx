@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, Music, List, LogOut, Cloud, CloudOff } from "lucide-react";
+import { Settings, Music, List, LogOut, Cloud, CloudOff, Plus } from "lucide-react";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
@@ -471,13 +471,22 @@ export default function Index() {
     return (
       <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">Nenhuma música selecionada</p>
-        <button
-          onClick={() => setShowLibrary(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-        >
-          <Music className="w-4 h-4" />
-          Abrir Biblioteca
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowLibrary(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+          >
+            <Music className="w-4 h-4" />
+            Biblioteca
+          </button>
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg"
+          >
+            <Plus className="w-4 h-4" />
+            Importar
+          </button>
+        </div>
         
         {/* Music Library Modal */}
         {showLibrary && (
