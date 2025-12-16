@@ -14,7 +14,148 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sections: {
+        Row: {
+          created_at: string
+          end_time: number
+          id: string
+          section_order: number
+          song_id: string
+          start_time: number
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: number
+          id?: string
+          section_order?: number
+          song_id: string
+          start_time: number
+          type: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: number
+          id?: string
+          section_order?: number
+          song_id?: string
+          start_time?: number
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sections_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      songs: {
+        Row: {
+          bpm: number | null
+          created_at: string
+          duration: number
+          id: string
+          in_setlist: boolean
+          name: string
+          setlist_order: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bpm?: number | null
+          created_at?: string
+          duration?: number
+          id?: string
+          in_setlist?: boolean
+          name: string
+          setlist_order?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bpm?: number | null
+          created_at?: string
+          duration?: number
+          id?: string
+          in_setlist?: boolean
+          name?: string
+          setlist_order?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tracks: {
+        Row: {
+          created_at: string
+          file_url: string
+          id: string
+          is_click: boolean
+          is_muted: boolean
+          name: string
+          song_id: string
+          track_order: number
+          volume: number
+        }
+        Insert: {
+          created_at?: string
+          file_url: string
+          id?: string
+          is_click?: boolean
+          is_muted?: boolean
+          name: string
+          song_id: string
+          track_order?: number
+          volume?: number
+        }
+        Update: {
+          created_at?: string
+          file_url?: string
+          id?: string
+          is_click?: boolean
+          is_muted?: boolean
+          name?: string
+          song_id?: string
+          track_order?: number
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracks_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
