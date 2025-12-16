@@ -5,6 +5,9 @@ import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
 import { SongList, Song } from "@/components/SongList";
+import { MusicLibrary } from "@/components/MusicLibrary";
+import { ImportMusic } from "@/components/ImportMusic";
+import { SettingsMenu } from "@/components/SettingsMenu";
 import { FaderTrack } from "@/components/HorizontalFaders";
 
 const initialTracks: FaderTrack[] = [
@@ -16,7 +19,8 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-const demoSongs: Song[] = [
+// All available songs in library
+const allSongs: Song[] = [
   { id: "1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
   { id: "2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
   { id: "3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
@@ -25,6 +29,13 @@ const demoSongs: Song[] = [
   { id: "6", title: "Way Maker", artist: "Sinach", duration: 295, bpm: 68 },
   { id: "7", title: "Goodness of God", artist: "Bethel Music", duration: 275, bpm: 63 },
   { id: "8", title: "Build My Life", artist: "Housefires", duration: 258, bpm: 72 },
+  { id: "9", title: "Great Are You Lord", artist: "All Sons & Daughters", duration: 312, bpm: 66 },
+  { id: "10", title: "Oceans", artist: "Hillsong United", duration: 485, bpm: 66 },
+  { id: "11", title: "King of Kings", artist: "Hillsong Worship", duration: 378, bpm: 72 },
+  { id: "12", title: "Who You Say I Am", artist: "Hillsong Worship", duration: 258, bpm: 74 },
+  { id: "13", title: "Living Hope", artist: "Phil Wickham", duration: 312, bpm: 69 },
+  { id: "14", title: "Graves Into Gardens", artist: "Elevation Worship", duration: 346, bpm: 72 },
+  { id: "15", title: "The Blessing", artist: "Kari Jobe", duration: 425, bpm: 68 },
 ];
 
 const BEATS_PER_BAR = 4;
@@ -37,11 +48,24 @@ export default function Index() {
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
-  const [currentSong, setCurrentSong] = useState<Song>(demoSongs[0]);
+  
+  // Library & Setlist state
+  const [librarySongs, setLibrarySongs] = useState<Song[]>(allSongs);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["1", "2", "3", "4", "5"]);
+  const [currentSongId, setCurrentSongId] = useState<string>("1");
+
+  // Modal states
+  const [showSettings, setShowSettings] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
+  // Derived state
+  const setlistSongs = librarySongs.filter((s) => selectedSongIds.includes(s.id));
+  const currentSong = librarySongs.find((s) => s.id === currentSongId) || setlistSongs[0];
 
   // Simulate playback
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || !currentSong) return;
 
     const interval = setInterval(() => {
       setCurrentTime((prev) => {
@@ -54,11 +78,11 @@ export default function Index() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentSong.duration]);
+  }, [isPlaying, currentSong]);
 
   // Simulate beat counter
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || !currentSong) return;
 
     const beatDuration = 60 / currentSong.bpm;
     const interval = setInterval(() => {
@@ -66,7 +90,7 @@ export default function Index() {
     }, beatDuration * 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentSong.bpm]);
+  }, [isPlaying, currentSong]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying((prev) => !prev);
@@ -83,8 +107,10 @@ export default function Index() {
   }, []);
 
   const handleNext = useCallback(() => {
-    setCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
-  }, [currentSong.duration]);
+    if (currentSong) {
+      setCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
+    }
+  }, [currentSong]);
 
   const handleSeek = useCallback((time: number) => {
     setCurrentTime(time);
@@ -97,15 +123,37 @@ export default function Index() {
   }, []);
 
   const handleSongSelect = useCallback((song: Song) => {
-    setCurrentSong(song);
+    setCurrentSongId(song.id);
     setCurrentTime(0);
     setIsPlaying(false);
     setCurrentBeat(1);
   }, []);
 
+  const handleToggleLibrarySong = useCallback((songId: string) => {
+    setSelectedSongIds((prev) =>
+      prev.includes(songId)
+        ? prev.filter((id) => id !== songId)
+        : [...prev, songId]
+    );
+  }, []);
+
+  const handleImportSongs = useCallback((newSongs: Song[]) => {
+    setLibrarySongs((prev) => [...prev, ...newSongs]);
+    // Auto-select imported songs
+    setSelectedSongIds((prev) => [...prev, ...newSongs.map((s) => s.id)]);
+  }, []);
+
+  if (!currentSong) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Header - Compacto */}
+    <div className="h-screen bg-background flex flex-col overflow-hidden relative">
+      {/* Header */}
       <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
           <button className="transport-btn min-w-[40px] min-h-[40px]">
@@ -122,11 +170,22 @@ export default function Index() {
 
         <div className="flex items-center gap-2">
           <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
-          <button className="transport-btn min-w-[40px] min-h-[40px]">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="transport-btn min-w-[40px] min-h-[40px]"
+          >
             <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
+
+      {/* Settings Menu */}
+      <SettingsMenu
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onOpenLibrary={() => setShowLibrary(true)}
+        onOpenImport={() => setShowImport(true)}
+      />
 
       {/* Main Content */}
       <main className="flex-1 p-3 overflow-hidden min-h-0 flex flex-col gap-3">
@@ -139,15 +198,15 @@ export default function Index() {
           onVolumeChange={handleVolumeChange}
         />
 
-        {/* Song List */}
+        {/* Setlist */}
         <SongList
-          songs={demoSongs}
-          currentSongId={currentSong.id}
+          songs={setlistSongs}
+          currentSongId={currentSongId}
           onSongSelect={handleSongSelect}
         />
       </main>
 
-      {/* Footer Controls - Compacto */}
+      {/* Footer Controls */}
       <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-2 space-y-2">
         <MasterControls
           masterVolume={masterVolume}
@@ -171,6 +230,24 @@ export default function Index() {
           />
         </div>
       </footer>
+
+      {/* Library Modal */}
+      {showLibrary && (
+        <MusicLibrary
+          songs={librarySongs}
+          selectedIds={selectedSongIds}
+          onToggleSelect={handleToggleLibrarySong}
+          onClose={() => setShowLibrary(false)}
+        />
+      )}
+
+      {/* Import Modal */}
+      {showImport && (
+        <ImportMusic
+          onImport={handleImportSongs}
+          onClose={() => setShowImport(false)}
+        />
+      )}
     </div>
   );
 }
