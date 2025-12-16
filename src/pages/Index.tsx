@@ -202,28 +202,36 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [isPlaying, currentSong]);
 
+  // Fade direction: true = fading to click, false = restoring volumes
+  const [isFadeRestoring, setIsFadeRestoring] = useState(false);
+
   // Fade to click effect - gradually fade instruments
   useEffect(() => {
-    if (!isFadingToClick && fadeProgress === 0) return;
-    if (!isFadingToClick && fadeProgress >= 100) return;
+    if (!isFadingToClick && !isFadeRestoring) return;
 
-    const fadeSpeed = isFadingToClick ? 2 : -4; // Fade out slower, restore faster
+    const fadeSpeed = 2; // Same gradual speed for both directions
     const interval = setInterval(() => {
       setFadeProgress(prev => {
-        const next = prev + fadeSpeed;
-        if (next <= 0) {
-          setIsFadingToClick(false);
-          return 0;
+        if (isFadingToClick) {
+          const next = prev + fadeSpeed;
+          if (next >= 100) {
+            return 100;
+          }
+          return next;
+        } else if (isFadeRestoring) {
+          const next = prev - fadeSpeed;
+          if (next <= 0) {
+            setIsFadeRestoring(false);
+            return 0;
+          }
+          return next;
         }
-        if (next >= 100) {
-          return 100;
-        }
-        return next;
+        return prev;
       });
     }, 50);
 
     return () => clearInterval(interval);
-  }, [isFadingToClick, fadeProgress]);
+  }, [isFadingToClick, isFadeRestoring]);
 
   // Apply fade to track volumes
   useEffect(() => {
@@ -246,7 +254,7 @@ export default function Index() {
 
   // Handle fade to click toggle
   const handleFadeToClickToggle = useCallback(() => {
-    if (fadeProgress === 0) {
+    if (fadeProgress === 0 && !isFadingToClick) {
       // Starting fade - save current volumes
       const volumes = new Map<string, number>();
       activeTracks.forEach(track => {
@@ -254,11 +262,13 @@ export default function Index() {
       });
       setSavedVolumes(volumes);
       setIsFadingToClick(true);
-    } else {
-      // Restoring - start fade back
+      setIsFadeRestoring(false);
+    } else if (fadeProgress > 0) {
+      // Restoring - start gradual fade back
       setIsFadingToClick(false);
+      setIsFadeRestoring(true);
     }
-  }, [fadeProgress, activeTracks]);
+  }, [fadeProgress, activeTracks, isFadingToClick]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
