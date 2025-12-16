@@ -548,8 +548,19 @@ export default function Index() {
         />
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {syncing && <Cloud className="w-4 h-4 text-primary animate-pulse" />}
+          {/* Cloud Sync Indicator */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50" title={syncing ? "Sincronizando..." : "Sincronizado"}>
+            {syncing ? (
+              <>
+                <Cloud className="w-3.5 h-3.5 text-primary animate-pulse" />
+                <span className="text-[10px] text-primary animate-pulse">Salvando...</span>
+              </>
+            ) : (
+              <>
+                <Cloud className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Cloud</span>
+              </>
+            )}
           </div>
           <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
           <button
