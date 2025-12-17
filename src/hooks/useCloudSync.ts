@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Song as AudioSong, Track, audioEngine } from '@/lib/audioEngine';
 import { SongSection } from '@/components/SectionEditor';
 import { toast } from 'sonner';
+import { audioCacheManager } from './useAudioCache';
 
 export interface CloudSong {
   id: string;
@@ -118,18 +119,36 @@ async function processTrackUpload(
   }
 }
 
-// Process track download with parallel execution
+// Process track download with cache-first strategy
 async function processTrackDownload(
-  track: { id: string; name: string; file_url: string; volume: number; is_muted: boolean }
+  track: { id: string; name: string; file_url: string; volume: number; is_muted: boolean; song_id: string }
 ): Promise<Track | null> {
   try {
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('audio-tracks')
-      .download(track.file_url);
+    let fileData: Blob;
 
-    if (downloadError) {
-      console.error('Error downloading track:', downloadError);
-      return null;
+    // Try to get from cache first
+    const cachedBlob = await audioCacheManager.getCachedTrack(track.file_url);
+    
+    if (cachedBlob) {
+      console.log(`[Cache] Hit: ${track.name}`);
+      fileData = cachedBlob;
+    } else {
+      // Download from cloud
+      console.log(`[Cloud] Downloading: ${track.name}`);
+      const { data: downloadedData, error: downloadError } = await supabase.storage
+        .from('audio-tracks')
+        .download(track.file_url);
+
+      if (downloadError || !downloadedData) {
+        console.error('Error downloading track:', downloadError);
+        return null;
+      }
+
+      fileData = downloadedData;
+
+      // Cache the downloaded file for future use
+      audioCacheManager.cacheTrack(track.file_url, downloadedData, track.song_id, track.name)
+        .catch(err => console.error('Error caching track:', err));
     }
 
     const audioBuffer = await audioEngine.decodeAudioFile(
@@ -230,8 +249,8 @@ export function useCloudSync(userId: string | undefined) {
       if (error) throw error;
 
       if (tracks && tracks.length > 0) {
-        // Download and decode ALL tracks in PARALLEL
-        const trackPromises = tracks.map(track => processTrackDownload(track));
+        // Download and decode ALL tracks in PARALLEL (with cache support)
+        const trackPromises = tracks.map(track => processTrackDownload({ ...track, song_id: song.id }));
         const audioTracksResults = await Promise.all(trackPromises);
         
         // Filter out null results
@@ -372,11 +391,14 @@ export function useCloudSync(userId: string | undefined) {
     }
   }, [userId]);
 
-  // Delete a song - optimized with parallel storage deletion
+  // Delete a song - optimized with parallel storage deletion + cache cleanup
   const deleteSong = useCallback(async (songId: string) => {
     if (!userId) return;
 
     try {
+      // Delete from local cache first
+      await audioCacheManager.deleteSongTracks(songId);
+
       // Delete tracks from storage in parallel
       const { data: tracks } = await supabase
         .from('tracks')

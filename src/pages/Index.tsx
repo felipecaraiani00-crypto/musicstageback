@@ -15,6 +15,7 @@ import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useAuth } from "@/hooks/useAuth";
 import { useCloudSync } from "@/hooks/useCloudSync";
+import { useAudioCache } from "@/hooks/useAudioCache";
 import { Song as AudioSong } from "@/lib/audioEngine";
 import { speakSection, initSpeech, isSpeechSupported } from "@/lib/speechSynthesis";
 import { createDemoSong } from "@/lib/demoSong";
@@ -72,6 +73,9 @@ export default function Index() {
     saveSections,
     deleteSong,
   } = useCloudSync(user?.id);
+
+  // Audio cache
+  const { formattedCacheSize, clearCache, refreshCacheInfo } = useAudioCache();
 
   // Local state for demo songs
   const [demoIsPlaying, setDemoIsPlaying] = useState(false);
@@ -588,6 +592,11 @@ export default function Index() {
         onOpenLibrary={() => setShowLibrary(true)}
         onOpenImport={() => setShowImport(true)}
         onOpenSectionEditor={() => setShowSectionEditor(true)}
+        cacheSize={formattedCacheSize}
+        onClearCache={async () => {
+          await clearCache();
+          toast.success('Cache limpo!');
+        }}
       />
 
       {/* Main Content - Landscape Layout */}
