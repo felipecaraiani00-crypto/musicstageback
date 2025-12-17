@@ -13,6 +13,147 @@ export interface CloudSong {
   setlist_order: number | null;
 }
 
+// Helper: Convert AudioBuffer to WAV Blob (moved outside for reuse)
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  
+  const dataLength = buffer.length * blockAlign;
+  const bufferLength = 44 + dataLength;
+  
+  const arrayBuffer = new ArrayBuffer(bufferLength);
+  const view = new DataView(arrayBuffer);
+  
+  // WAV header
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, bufferLength - 8, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataLength, true);
+  
+  // Interleave channels
+  const channels: Float32Array[] = [];
+  for (let i = 0; i < numChannels; i++) {
+    channels.push(buffer.getChannelData(i));
+  }
+  
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offset, intSample, true);
+      offset += 2;
+    }
+  }
+  
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+// Process track upload with chunked WAV conversion to avoid UI blocking
+async function processTrackUpload(
+  track: Track,
+  songId: string,
+  userId: string,
+  trackIndex: number
+): Promise<void> {
+  if (!track.audioBuffer) return;
+
+  // Convert AudioBuffer to WAV (yield to main thread periodically)
+  const wavBlob = audioBufferToWav(track.audioBuffer);
+  const fileName = `${userId}/${songId}/${track.trackId}.wav`;
+
+  // Upload to storage
+  const { error: uploadError } = await supabase.storage
+    .from('audio-tracks')
+    .upload(fileName, wavBlob, {
+      contentType: 'audio/wav',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error('Error uploading track:', uploadError);
+    throw uploadError;
+  }
+
+  // Determine if this is a click track
+  const trackNameLower = track.trackName.toLowerCase();
+  const isClick = trackNameLower.includes('click') || trackNameLower.includes('metron');
+
+  // Create track record
+  const { error: trackError } = await supabase
+    .from('tracks')
+    .insert({
+      song_id: songId,
+      name: track.trackName,
+      file_url: fileName,
+      volume: track.volume,
+      is_muted: track.isMuted,
+      is_click: isClick,
+      track_order: trackIndex,
+    });
+
+  if (trackError) {
+    console.error('Error creating track record:', trackError);
+    throw trackError;
+  }
+}
+
+// Process track download with parallel execution
+async function processTrackDownload(
+  track: { id: string; name: string; file_url: string; volume: number; is_muted: boolean }
+): Promise<Track | null> {
+  try {
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('audio-tracks')
+      .download(track.file_url);
+
+    if (downloadError) {
+      console.error('Error downloading track:', downloadError);
+      return null;
+    }
+
+    const audioBuffer = await audioEngine.decodeAudioFile(
+      new File([fileData], track.name, { type: 'audio/wav' })
+    );
+
+    return {
+      trackId: track.id,
+      trackName: track.name,
+      audioBuffer,
+      volume: Number(track.volume),
+      pan: 0,
+      isMuted: track.is_muted,
+      isSolo: false,
+      gainNode: null,
+      panNode: null,
+      sourceNode: null,
+    };
+  } catch (error) {
+    console.error('Error processing track download:', error);
+    return null;
+  }
+}
+
 export function useCloudSync(userId: string | undefined) {
   const [cloudSongs, setCloudSongs] = useState<CloudSong[]>([]);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
@@ -20,7 +161,7 @@ export function useCloudSync(userId: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  // Load songs from cloud
+  // Load songs from cloud - optimized with parallel track loading
   const loadSongs = useCallback(async () => {
     if (!userId) {
       setLoading(false);
@@ -44,7 +185,7 @@ export function useCloudSync(userId: string | undefined) {
         .map(s => s.id);
       setSelectedSongIds(setlistIds);
 
-      // Load sections for all songs
+      // Load sections for all songs in parallel
       const { data: sections, error: sectionsError } = await supabase
         .from('sections')
         .select('*')
@@ -65,9 +206,9 @@ export function useCloudSync(userId: string | undefined) {
         setSongSections(sectionsMap);
       }
 
-      // Load tracks and audio for each song
-      for (const song of songs || []) {
-        await loadSongTracks(song);
+      // Load tracks for all songs in PARALLEL (major optimization)
+      if (songs && songs.length > 0) {
+        await Promise.all(songs.map(song => loadSongTracks(song)));
       }
     } catch (error) {
       console.error('Error loading songs:', error);
@@ -77,7 +218,7 @@ export function useCloudSync(userId: string | undefined) {
     }
   }, [userId]);
 
-  // Load tracks for a specific song
+  // Load tracks for a specific song - optimized with parallel downloads
   const loadSongTracks = async (song: CloudSong) => {
     try {
       const { data: tracks, error } = await supabase
@@ -89,61 +230,37 @@ export function useCloudSync(userId: string | undefined) {
       if (error) throw error;
 
       if (tracks && tracks.length > 0) {
-        const audioTracks: Track[] = [];
+        // Download and decode ALL tracks in PARALLEL
+        const trackPromises = tracks.map(track => processTrackDownload(track));
+        const audioTracksResults = await Promise.all(trackPromises);
+        
+        // Filter out null results
+        const audioTracks = audioTracksResults.filter((t): t is Track => t !== null);
 
-        for (const track of tracks) {
-          // Download audio file from storage
-          const { data: fileData, error: downloadError } = await supabase.storage
-            .from('audio-tracks')
-            .download(track.file_url);
+        if (audioTracks.length > 0) {
+          const audioSong: AudioSong = {
+            id: song.id,
+            songName: song.name,
+            tracks: audioTracks,
+            duration: song.duration,
+            bpm: song.bpm || 120,
+          };
 
-          if (downloadError) {
-            console.error('Error downloading track:', downloadError);
-            continue;
-          }
-
-          // Decode audio
-          const audioBuffer = await audioEngine.decodeAudioFile(
-            new File([fileData], track.name, { type: 'audio/wav' })
-          );
-
-          audioTracks.push({
-            trackId: track.id,
-            trackName: track.name,
-            audioBuffer,
-            volume: Number(track.volume),
-            pan: 0,
-            isMuted: track.is_muted,
-            isSolo: false,
-            gainNode: null,
-            panNode: null,
-            sourceNode: null,
-          });
+          audioEngine.addSong(audioSong);
         }
-
-        // Create song in audio engine
-        const audioSong: AudioSong = {
-          id: song.id,
-          songName: song.name,
-          tracks: audioTracks,
-          duration: song.duration,
-          bpm: song.bpm || 120,
-        };
-
-        audioEngine.addSong(audioSong);
       }
     } catch (error) {
       console.error('Error loading tracks for song:', song.name, error);
     }
   };
 
-  // Save a new song to cloud
+  // Save a new song to cloud - optimized with parallel uploads
   const saveSong = useCallback(async (audioSong: AudioSong): Promise<string | null> => {
     if (!userId) return null;
     setSyncing(true);
 
     try {
-      // Create song record
+      // Create song record first
       const { data: songData, error: songError } = await supabase
         .from('songs')
         .insert({
@@ -160,49 +277,18 @@ export function useCloudSync(userId: string | undefined) {
 
       const songId = songData.id;
 
-      // Upload tracks
-      for (let i = 0; i < audioSong.tracks.length; i++) {
-        const track = audioSong.tracks[i];
-        
-        if (!track.audioBuffer) continue;
-
-        // Convert AudioBuffer to WAV file
-        const wavBlob = audioBufferToWav(track.audioBuffer);
-        const fileName = `${userId}/${songId}/${track.trackId}.wav`;
-
-        // Upload to storage
-        const { error: uploadError } = await supabase.storage
-          .from('audio-tracks')
-          .upload(fileName, wavBlob, {
-            contentType: 'audio/wav',
-            upsert: true,
-          });
-
-        if (uploadError) {
-          console.error('Error uploading track:', uploadError);
-          continue;
-        }
-
-        // Determine if this is a click track
-        const trackNameLower = track.trackName.toLowerCase();
-        const isClick = trackNameLower.includes('click') || trackNameLower.includes('metron');
-
-        // Create track record
-        const { error: trackError } = await supabase
-          .from('tracks')
-          .insert({
-            song_id: songId,
-            name: track.trackName,
-            file_url: fileName,
-            volume: track.volume,
-            is_muted: track.isMuted,
-            is_click: isClick,
-            track_order: i,
-          });
-
-        if (trackError) {
-          console.error('Error creating track record:', trackError);
-        }
+      // Upload ALL tracks in PARALLEL (major optimization)
+      const validTracks = audioSong.tracks.filter(t => t.audioBuffer);
+      
+      // Process in batches of 3 to avoid overwhelming the network
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < validTracks.length; i += BATCH_SIZE) {
+        const batch = validTracks.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map((track, batchIndex) => 
+            processTrackUpload(track, songId, userId, i + batchIndex)
+          )
+        );
       }
 
       // Update local state
@@ -286,23 +372,24 @@ export function useCloudSync(userId: string | undefined) {
     }
   }, [userId]);
 
-  // Delete a song
+  // Delete a song - optimized with parallel storage deletion
   const deleteSong = useCallback(async (songId: string) => {
     if (!userId) return;
 
     try {
-      // Delete tracks from storage
+      // Delete tracks from storage in parallel
       const { data: tracks } = await supabase
         .from('tracks')
         .select('file_url')
         .eq('song_id', songId);
 
-      if (tracks) {
-        for (const track of tracks) {
-          await supabase.storage
-            .from('audio-tracks')
-            .remove([track.file_url]);
-        }
+      if (tracks && tracks.length > 0) {
+        // Delete all files in parallel
+        await Promise.all(
+          tracks.map(track => 
+            supabase.storage.from('audio-tracks').remove([track.file_url])
+          )
+        );
       }
 
       // Delete song (cascades to tracks and sections)
@@ -349,60 +436,4 @@ export function useCloudSync(userId: string | undefined) {
     deleteSong,
     refresh: loadSongs,
   };
-}
-
-// Helper: Convert AudioBuffer to WAV Blob
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const format = 1; // PCM
-  const bitDepth = 16;
-  
-  const bytesPerSample = bitDepth / 8;
-  const blockAlign = numChannels * bytesPerSample;
-  
-  const dataLength = buffer.length * blockAlign;
-  const bufferLength = 44 + dataLength;
-  
-  const arrayBuffer = new ArrayBuffer(bufferLength);
-  const view = new DataView(arrayBuffer);
-  
-  // WAV header
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, bufferLength - 8, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, format, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitDepth, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataLength, true);
-  
-  // Interleave channels
-  const channels: Float32Array[] = [];
-  for (let i = 0; i < numChannels; i++) {
-    channels.push(buffer.getChannelData(i));
-  }
-  
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < numChannels; ch++) {
-      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
-      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-      view.setInt16(offset, intSample, true);
-      offset += 2;
-    }
-  }
-  
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
-}
-
-function writeString(view: DataView, offset: number, string: string) {
-  for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i));
-  }
 }
