@@ -1,4 +1,4 @@
-import { Library, Upload, Settings as SettingsIcon, Music2 } from "lucide-react";
+import { Library, Upload, Settings as SettingsIcon, Music2, HardDrive, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SettingsMenuProps {
@@ -7,6 +7,8 @@ interface SettingsMenuProps {
   onOpenLibrary: () => void;
   onOpenImport: () => void;
   onOpenSectionEditor: () => void;
+  cacheSize?: string;
+  onClearCache?: () => void;
 }
 
 export function SettingsMenu({ 
@@ -15,6 +17,8 @@ export function SettingsMenu({
   onOpenLibrary, 
   onOpenImport,
   onOpenSectionEditor,
+  cacheSize,
+  onClearCache,
 }: SettingsMenuProps) {
   if (!isOpen) return null;
 
@@ -24,7 +28,7 @@ export function SettingsMenu({
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
       {/* Menu */}
-      <div className="absolute right-3 top-12 z-50 w-48 py-1 rounded-lg bg-card border border-border shadow-xl animate-fade-in">
+      <div className="absolute right-3 top-12 z-50 w-52 py-1 rounded-lg bg-card border border-border shadow-xl animate-fade-in">
         <button
           onClick={() => {
             onOpenLibrary();
@@ -57,6 +61,32 @@ export function SettingsMenu({
           <Music2 className="w-4 h-4 text-green-500" />
           <span className="text-sm">Editar Seções</span>
         </button>
+
+        <div className="h-px bg-border my-1" />
+
+        {/* Cache info */}
+        {cacheSize && (
+          <div className="px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Cache: {cacheSize}</span>
+            </div>
+            {onClearCache && (
+              <button
+                onClick={() => {
+                  if (confirm('Limpar cache local? As músicas serão baixadas novamente quando necessário.')) {
+                    onClearCache();
+                    onClose();
+                  }
+                }}
+                className="p-1 hover:bg-destructive/20 rounded transition-colors"
+                title="Limpar cache"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="h-px bg-border my-1" />
 
