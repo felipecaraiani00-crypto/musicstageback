@@ -79,49 +79,69 @@ export async function importZipFile(
       progress: 15,
     });
 
-    // Process each audio file
+    // Process audio files in PARALLEL for better performance
     const tracks: Track[] = [];
     const audioBuffers: AudioBuffer[] = [];
     let maxDuration = 0;
-    
-    for (let i = 0; i < audioFiles.length; i++) {
-      const { path, zipEntry } = audioFiles[i];
-      const trackName = extractTrackName(path);
-      
-      onProgress?.({
-        stage: 'decoding',
-        currentFile: trackName,
-        progress: 15 + Math.floor((i / audioFiles.length) * 60),
-      });
+    let processedCount = 0;
 
-      // Extract file content
-      const audioData = await zipEntry.async('arraybuffer');
+    // Extract all files first (parallel extraction)
+    const extractedFiles = await Promise.all(
+      audioFiles.map(async ({ path, zipEntry }) => ({
+        trackName: extractTrackName(path),
+        audioData: await zipEntry.async('arraybuffer'),
+      }))
+    );
+
+    onProgress?.({
+      stage: 'decoding',
+      currentFile: 'Decodificando áudio...',
+      progress: 30,
+    });
+
+    // Decode all audio files in parallel (batched to avoid memory issues)
+    const DECODE_BATCH_SIZE = 4;
+    for (let i = 0; i < extractedFiles.length; i += DECODE_BATCH_SIZE) {
+      const batch = extractedFiles.slice(i, i + DECODE_BATCH_SIZE);
       
-      // Create a File-like object for decoding
-      const audioFile = new File([audioData], trackName, { type: 'audio/wav' });
-      
-      // Decode audio
-      const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
-      
-      if (audioBuffer) {
-        maxDuration = Math.max(maxDuration, audioBuffer.duration);
-        audioBuffers.push(audioBuffer);
+      const batchResults = await Promise.all(
+        batch.map(async ({ trackName, audioData }) => {
+          const audioFile = new File([audioData], trackName, { type: 'audio/wav' });
+          const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
+          
+          processedCount++;
+          onProgress?.({
+            stage: 'decoding',
+            currentFile: trackName,
+            progress: 30 + Math.floor((processedCount / extractedFiles.length) * 45),
+          });
+
+          return { trackName, audioBuffer };
+        })
+      );
+
+      // Process results from this batch
+      for (const { trackName, audioBuffer } of batchResults) {
+        if (audioBuffer) {
+          maxDuration = Math.max(maxDuration, audioBuffer.duration);
+          audioBuffers.push(audioBuffer);
+        }
+
+        const track: Track = {
+          trackId: generateId(),
+          trackName,
+          audioBuffer,
+          volume: 1.0,
+          pan: 0,
+          isMuted: false,
+          isSolo: false,
+          gainNode: null,
+          panNode: null,
+          sourceNode: null,
+        };
+
+        tracks.push(track);
       }
-
-      const track: Track = {
-        trackId: generateId(),
-        trackName,
-        audioBuffer,
-        volume: 1.0,
-        pan: 0, // Center by default
-        isMuted: false,
-        isSolo: false,
-        gainNode: null,
-        panNode: null,
-        sourceNode: null,
-      };
-
-      tracks.push(track);
     }
 
     // Detect BPM from audio buffers
