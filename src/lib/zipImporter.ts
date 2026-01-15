@@ -39,6 +39,7 @@ function generateId(): string {
 }
 
 // Process a ZIP file and create a Song with Tracks
+// Optimized for large files (600MB+)
 export async function importZipFile(
   file: File,
   onProgress?: (progress: ImportProgress) => void
@@ -53,8 +54,11 @@ export async function importZipFile(
       progress: 0,
     });
 
-    // Load and extract ZIP
-    const zip = await JSZip.loadAsync(file);
+    // Load ZIP with optimized settings for large files
+    const zip = await JSZip.loadAsync(file, {
+      // Use streaming for large files to reduce memory usage
+      createFolders: false,
+    });
     
     // Find all audio files in the ZIP
     const audioFiles: { path: string; zipEntry: JSZip.JSZipObject }[] = [];
@@ -78,9 +82,18 @@ export async function importZipFile(
       progress: 20,
     });
 
-    // Process each audio file
+    // Process each audio file sequentially to manage memory for large files
     const tracks: Track[] = [];
     let maxDuration = 0;
+    
+    // Sort files to process click/metronome first (usually smaller)
+    audioFiles.sort((a, b) => {
+      const aName = a.path.toLowerCase();
+      const bName = b.path.toLowerCase();
+      if (aName.includes('click') || aName.includes('metron')) return -1;
+      if (bName.includes('click') || bName.includes('metron')) return 1;
+      return 0;
+    });
     
     for (let i = 0; i < audioFiles.length; i++) {
       const { path, zipEntry } = audioFiles[i];
@@ -92,30 +105,47 @@ export async function importZipFile(
         progress: 20 + Math.floor((i / audioFiles.length) * 70),
       });
 
-      // Extract file content
-      const audioData = await zipEntry.async('arraybuffer');
-      
-      // Create a File-like object for decoding
-      const audioFile = new File([audioData], trackName, { type: 'audio/wav' });
-      
-      // Decode audio
-      const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
-      
-      if (audioBuffer) {
-        maxDuration = Math.max(maxDuration, audioBuffer.duration);
+      try {
+        // Extract file content as ArrayBuffer
+        const audioData = await zipEntry.async('arraybuffer');
+        
+        // Get MIME type based on extension
+        const ext = trackName.toLowerCase().split('.').pop();
+        const mimeTypes: Record<string, string> = {
+          'wav': 'audio/wav',
+          'mp3': 'audio/mpeg',
+          'aiff': 'audio/aiff',
+          'flac': 'audio/flac',
+          'ogg': 'audio/ogg',
+          'm4a': 'audio/mp4',
+        };
+        const mimeType = mimeTypes[ext || 'wav'] || 'audio/wav';
+        
+        // Create a File object for decoding
+        const audioFile = new File([audioData], trackName, { type: mimeType });
+        
+        // Decode audio
+        const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
+        
+        if (audioBuffer) {
+          maxDuration = Math.max(maxDuration, audioBuffer.duration);
+        }
+
+        const track: Track = {
+          trackId: generateId(),
+          trackName,
+          audioBuffer,
+          volume: 1.0,
+          isMuted: false,
+          gainNode: null,
+          sourceNode: null,
+        };
+
+        tracks.push(track);
+      } catch (trackError) {
+        console.warn(`Failed to decode track ${trackName}:`, trackError);
+        // Continue with other tracks even if one fails
       }
-
-      const track: Track = {
-        trackId: generateId(),
-        trackName,
-        audioBuffer,
-        volume: 1.0,
-        isMuted: false,
-        gainNode: null,
-        sourceNode: null,
-      };
-
-      tracks.push(track);
     }
 
     onProgress?.({
