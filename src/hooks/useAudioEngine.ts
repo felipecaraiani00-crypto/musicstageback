@@ -5,12 +5,25 @@ import { getTrackIcon, getTrackColor } from '@/lib/zipImporter';
 
 export function useAudioEngine() {
   const [state, setState] = useState<AudioEngineState>(audioEngine.getState());
+  const [playbackState, setPlaybackState] = useState({
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+  });
 
   useEffect(() => {
     const unsubscribe = audioEngine.subscribe((newState) => {
       setState(newState);
     });
-    return unsubscribe;
+    
+    const unsubscribePlayback = audioEngine.subscribeToPlayback((newPlaybackState) => {
+      setPlaybackState(newPlaybackState);
+    });
+    
+    return () => {
+      unsubscribe();
+      unsubscribePlayback();
+    };
   }, []);
 
   // Convert Song tracks to FaderTrack format for UI
@@ -48,6 +61,31 @@ export function useAudioEngine() {
     audioEngine.setCurrentSong(songId);
   }, []);
 
+  // Playback controls
+  const play = useCallback(() => {
+    audioEngine.play();
+  }, []);
+
+  const pause = useCallback(() => {
+    audioEngine.pause();
+  }, []);
+
+  const stop = useCallback(() => {
+    audioEngine.stop();
+  }, []);
+
+  const seek = useCallback((time: number) => {
+    audioEngine.seek(time);
+  }, []);
+
+  const togglePlayPause = useCallback(() => {
+    if (audioEngine.getIsPlaying()) {
+      audioEngine.pause();
+    } else {
+      audioEngine.play();
+    }
+  }, []);
+
   // Get current song's fader tracks
   const currentFaderTracks = state.currentSongId 
     ? getFaderTracks(state.currentSongId) 
@@ -63,5 +101,14 @@ export function useAudioEngine() {
     handleTrackMuteToggle,
     setMasterVolume,
     setCurrentSong,
+    // Playback
+    isPlaying: playbackState.isPlaying,
+    currentTime: playbackState.currentTime,
+    duration: playbackState.duration,
+    play,
+    pause,
+    stop,
+    seek,
+    togglePlayPause,
   };
 }
