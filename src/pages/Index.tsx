@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { Settings, Music, List, LogOut, Cloud, CloudOff, Plus } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Settings, Music, List } from "lucide-react";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
@@ -9,28 +8,9 @@ import { SongList, Song } from "@/components/SongList";
 import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
-import { SectionEditor, SongSection, SectionType } from "@/components/SectionEditor";
-import { CurrentSectionIndicator } from "@/components/CurrentSectionIndicator";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
-import { useAuth } from "@/hooks/useAuth";
-import { useCloudSync } from "@/hooks/useCloudSync";
-import { useAudioCache } from "@/hooks/useAudioCache";
 import { Song as AudioSong } from "@/lib/audioEngine";
-import { speakSection, initSpeech, isSpeechSupported } from "@/lib/speechSynthesis";
-import { createDemoSong } from "@/lib/demoSong";
-import { toast } from "sonner";
-
-const sectionNames: Record<SectionType, string> = {
-  intro: "Intro",
-  verse: "Verso",
-  "pre-chorus": "Pré-Refrão",
-  chorus: "Refrão",
-  bridge: "Ponte",
-  solo: "Solo",
-  interlude: "Interlúdio",
-  outro: "Outro",
-};
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
@@ -41,8 +21,14 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// Empty library songs (demo song is generated dynamically)
-const demoSongs: Song[] = [];
+// All available songs in library (demo data)
+const demoSongs: Song[] = [
+  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
+  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
+  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
+  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
+  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
+];
 
 const BEATS_PER_BAR = 4;
 
@@ -58,119 +44,36 @@ function audioSongToUISong(audioSong: AudioSong): Song {
 }
 
 export default function Index() {
-  const navigate = useNavigate();
-  const { user, loading: authLoading, signOut, isAuthenticated } = useAuth();
-  
-  // Cloud sync
-  const {
-    cloudSongs,
-    selectedSongIds: cloudSelectedIds,
-    songSections: cloudSongSections,
-    loading: cloudLoading,
-    syncing,
-    saveSong,
-    updateSetlist,
-    saveSections,
-    deleteSong,
-  } = useCloudSync(user?.id);
-
-  // Audio cache
-  const { formattedCacheSize, clearCache, refreshCacheInfo } = useAudioCache();
-
-  // Local state for demo songs
-  const [demoIsPlaying, setDemoIsPlaying] = useState(false);
-  const [demoCurrentTime, setDemoCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
+  const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
-  
-  // Fade to click state
-  const [isFadingToClick, setIsFadingToClick] = useState(false);
-  const [fadeProgress, setFadeProgress] = useState(0);
-  const [savedVolumes, setSavedVolumes] = useState<Map<string, number>>(new Map());
   
   // Audio Engine integration
   const { 
     songs: audioEngineSongs, 
     currentSongId: audioCurrentSongId,
     currentFaderTracks,
-    currentWaveformData,
-    isPlaying: engineIsPlaying,
-    currentTime: engineCurrentTime,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
-    handleTrackSoloToggle,
-    setStereoSplit,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
-    play: enginePlay,
-    pause: enginePause,
-    stop: engineStop,
-    togglePlayPause: engineTogglePlayPause,
-    seek: engineSeek,
-    skip: engineSkip,
   } = useAudioEngine();
   
-  // Stereo split state
-  const [stereoSplit, setStereoSplitState] = useState(0); // -1 = click left, 0 = center, 1 = click right
-  
-  const handleStereoSplitChange = useCallback((side: number) => {
-    setStereoSplitState(side);
-    setStereoSplit(side);
-  }, [setStereoSplit]);
-  
-  // Library & Setlist state - use cloud data when authenticated
+  // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
-  const [currentSongId, setCurrentSongId] = useState<string>("");
-
-  // Song sections state - use cloud data when authenticated
-  const [localSongSections, setLocalSongSections] = useState<Map<string, SongSection[]>>(new Map());
-  const songSections = isAuthenticated ? cloudSongSections : localSongSections;
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["demo-1", "demo-2", "demo-3"]);
+  const [currentSongId, setCurrentSongId] = useState<string>("demo-1");
 
   // Modal states
   const [showSettings, setShowSettings] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showSectionEditor, setShowSectionEditor] = useState(false);
-  
-  // Voice announcement state
-  const [voiceAnnouncementsEnabled, setVoiceAnnouncementsEnabled] = useState(true);
-  const lastAnnouncedSectionRef = useRef<string | null>(null);
 
-  // Redirect to auth if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/auth', { replace: true });
-    }
-  }, [authLoading, isAuthenticated, navigate]);
-
-  // Sync selected song IDs from cloud
-  useEffect(() => {
-    if (isAuthenticated && cloudSelectedIds.length > 0) {
-      setSelectedSongIds(cloudSelectedIds);
-      if (!currentSongId || !cloudSelectedIds.includes(currentSongId)) {
-        setCurrentSongId(cloudSelectedIds[0]);
-      }
-    }
-  }, [isAuthenticated, cloudSelectedIds]);
-
-  // Load demo song when no songs exist
-  const [demoLoaded, setDemoLoaded] = useState(false);
-  useEffect(() => {
-    if (!cloudLoading && audioEngineSongs.length === 0 && !demoLoaded) {
-      createDemoSong().then((song) => {
-        if (song) {
-          setDemoLoaded(true);
-          setSelectedSongIds([song.id]);
-          setCurrentSongId(song.id);
-          toast.success("Música demo carregada!");
-        }
-      });
-    }
-  }, [cloudLoading, audioEngineSongs.length, demoLoaded]);
-
+  // Merge demo songs with imported audio engine songs
   const allLibrarySongs: Song[] = [
     ...librarySongs,
     ...audioEngineSongs.map(audioSongToUISong),
@@ -183,64 +86,19 @@ export default function Index() {
   // Check if current song is from audio engine (has tracks)
   const isImportedSong = audioEngineSongs.some(s => s.id === currentSongId);
   
-  // Use audio engine state for imported songs, local state for demo songs
-  const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
-  const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
-  
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
     ? currentFaderTracks 
     : tracks;
 
-  // Get current section based on time
-  const currentSections = currentSong ? (songSections.get(currentSong.id) || []) : [];
-  const currentSection = useMemo(() => {
-    return currentSections.find(
-      section => currentTime >= section.startTime && currentTime <= section.endTime
-    );
-  }, [currentSections, currentTime]);
-
-  // Calculate 2 beats in seconds based on BPM
-  const twoBeatsInSeconds = currentSong ? (60 / currentSong.bpm) * 2 : 0;
-
-  // Find upcoming section (2 beats ahead)
-  const upcomingSection = useMemo(() => {
-    const lookAheadTime = currentTime + twoBeatsInSeconds;
-    return currentSections.find(
-      section => lookAheadTime >= section.startTime && lookAheadTime <= section.startTime + 0.5
-    );
-  }, [currentSections, currentTime, twoBeatsInSeconds]);
-
-  // Voice announcement for upcoming sections (2 beats before)
+  // Simulate playback
   useEffect(() => {
-    if (!voiceAnnouncementsEnabled || !isPlaying || !upcomingSection) {
-      return;
-    }
-
-    const sectionKey = `${upcomingSection.id}-${upcomingSection.type}`;
-    
-    if (lastAnnouncedSectionRef.current !== sectionKey) {
-      lastAnnouncedSectionRef.current = sectionKey;
-      const sectionName = sectionNames[upcomingSection.type];
-      speakSection(sectionName);
-    }
-  }, [upcomingSection, isPlaying, voiceAnnouncementsEnabled]);
-
-  // Reset announced section when song changes or stops
-  useEffect(() => {
-    if (!isPlaying) {
-      lastAnnouncedSectionRef.current = null;
-    }
-  }, [isPlaying, currentSongId]);
-
-  // Simulate playback for demo songs only
-  useEffect(() => {
-    if (!demoIsPlaying || !currentSong || isImportedSong) return;
+    if (!isPlaying || !currentSong) return;
 
     const interval = setInterval(() => {
-      setDemoCurrentTime((prev) => {
+      setCurrentTime((prev) => {
         if (prev >= currentSong.duration) {
-          setDemoIsPlaying(false);
+          setIsPlaying(false);
           return 0;
         }
         return prev + 0.1;
@@ -248,7 +106,7 @@ export default function Index() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [demoIsPlaying, currentSong, isImportedSong]);
+  }, [isPlaying, currentSong]);
 
   // Simulate beat counter
   useEffect(() => {
@@ -262,117 +120,29 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [isPlaying, currentSong]);
 
-  // Fade direction: true = fading to click, false = restoring volumes
-  const [isFadeRestoring, setIsFadeRestoring] = useState(false);
-
-  // Fade to click effect - gradually fade instruments
-  useEffect(() => {
-    if (!isFadingToClick && !isFadeRestoring) return;
-
-    const fadeSpeed = 2; // Same gradual speed for both directions
-    const interval = setInterval(() => {
-      setFadeProgress(prev => {
-        if (isFadingToClick) {
-          const next = prev + fadeSpeed;
-          if (next >= 100) {
-            return 100;
-          }
-          return next;
-        } else if (isFadeRestoring) {
-          const next = prev - fadeSpeed;
-          if (next <= 0) {
-            setIsFadeRestoring(false);
-            return 0;
-          }
-          return next;
-        }
-        return prev;
-      });
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [isFadingToClick, isFadeRestoring]);
-
-  // Apply fade to track volumes
-  useEffect(() => {
-    if (!isImportedSong) return;
-    
-    const fadeMultiplier = 1 - (fadeProgress / 100);
-    
-    activeTracks.forEach(track => {
-      const trackNameLower = track.name.toLowerCase();
-      const isClickTrack = trackNameLower.includes('click') || trackNameLower.includes('metron');
-      
-      if (!isClickTrack) {
-        // Get saved volume or current volume
-        const baseVolume = savedVolumes.get(track.id) ?? track.volume;
-        const newVolume = Math.round(baseVolume * fadeMultiplier);
-        handleTrackVolumeChange(track.id, newVolume);
-      }
-    });
-  }, [fadeProgress, isImportedSong]);
-
-  // Handle fade to click toggle
-  const handleFadeToClickToggle = useCallback(() => {
-    if (fadeProgress === 0 && !isFadingToClick) {
-      // Starting fade - save current volumes
-      const volumes = new Map<string, number>();
-      activeTracks.forEach(track => {
-        volumes.set(track.id, track.volume);
-      });
-      setSavedVolumes(volumes);
-      setIsFadingToClick(true);
-      setIsFadeRestoring(false);
-    } else if (fadeProgress > 0) {
-      // Restoring - start gradual fade back
-      setIsFadingToClick(false);
-      setIsFadeRestoring(true);
-    }
-  }, [fadeProgress, activeTracks, isFadingToClick]);
-
   const handlePlayPause = useCallback(() => {
-    if (isImportedSong) {
-      engineTogglePlayPause();
-    } else {
-      setDemoIsPlaying((prev) => !prev);
-    }
-  }, [isImportedSong, engineTogglePlayPause]);
+    setIsPlaying((prev) => !prev);
+  }, []);
 
   const handleStop = useCallback(() => {
-    if (isImportedSong) {
-      engineStop();
-    } else {
-      setDemoIsPlaying(false);
-      setDemoCurrentTime(0);
-    }
+    setIsPlaying(false);
+    setCurrentTime(0);
     setCurrentBeat(1);
-  }, [isImportedSong, engineStop]);
+  }, []);
 
   const handlePrev = useCallback(() => {
-    if (isImportedSong) {
-      engineSkip(-10);
-    } else {
-      setDemoCurrentTime((prev) => Math.max(0, prev - 10));
-    }
-  }, [isImportedSong, engineSkip]);
+    setCurrentTime((prev) => Math.max(0, prev - 10));
+  }, []);
 
   const handleNext = useCallback(() => {
     if (currentSong) {
-      if (isImportedSong) {
-        engineSkip(10);
-      } else {
-        setDemoCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
-      }
+      setCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
     }
-  }, [currentSong, isImportedSong, engineSkip]);
+  }, [currentSong]);
 
   const handleSeek = useCallback((time: number) => {
-    if (isImportedSong) {
-      engineSeek(time);
-    } else {
-      setDemoCurrentTime(time);
-    }
-  }, [isImportedSong, engineSeek]);
+    setCurrentTime(time);
+  }, []);
 
   // Handle volume change - route to appropriate handler
   const handleVolumeChange = useCallback((trackId: string, volume: number) => {
@@ -394,135 +164,46 @@ export default function Index() {
     }
   }, [isImportedSong, handleTrackMuteToggle]);
 
-  // Handle solo toggle
-  const handleSoloToggle = useCallback((trackId: string) => {
-    if (isImportedSong) {
-      handleTrackSoloToggle(trackId);
-    }
-  }, [isImportedSong, handleTrackSoloToggle]);
-
   const handleSongSelect = useCallback((song: Song) => {
-    // Stop any current playback
-    if (isImportedSong) {
-      engineStop();
-    } else {
-      setDemoIsPlaying(false);
-    }
-    
     setCurrentSongId(song.id);
-    setDemoCurrentTime(0);
+    setCurrentTime(0);
+    setIsPlaying(false);
     setCurrentBeat(1);
     
     // Also update audio engine if it's an imported song
     if (audioEngineSongs.some(s => s.id === song.id)) {
       setEngineCurrentSong(song.id);
     }
-  }, [audioEngineSongs, setEngineCurrentSong, isImportedSong, engineStop]);
+  }, [audioEngineSongs, setEngineCurrentSong]);
 
   const handleToggleLibrarySong = useCallback((songId: string) => {
-    if (isAuthenticated) {
-      const isInSetlist = selectedSongIds.includes(songId);
-      updateSetlist(songId, !isInSetlist);
-    } else {
-      setSelectedSongIds((prev) =>
-        prev.includes(songId)
-          ? prev.filter((id) => id !== songId)
-          : [...prev, songId]
-      );
-    }
-  }, [isAuthenticated, selectedSongIds, updateSetlist]);
+    setSelectedSongIds((prev) =>
+      prev.includes(songId)
+        ? prev.filter((id) => id !== songId)
+        : [...prev, songId]
+    );
+  }, []);
 
-  const handleImportSongs = useCallback(async (newSongs: AudioSong[]) => {
-    // Save to cloud if authenticated
-    if (isAuthenticated) {
-      for (const song of newSongs) {
-        await saveSong(song);
-      }
-    } else {
-      // Just update local state for demo
-      setSelectedSongIds((prev) => [...prev, ...newSongs.map((s) => s.id)]);
-    }
+  const handleImportSongs = useCallback((newSongs: AudioSong[]) => {
+    // Auto-select imported songs
+    setSelectedSongIds((prev) => [...prev, ...newSongs.map((s) => s.id)]);
     
     // Select the first imported song
     if (newSongs.length > 0) {
       setCurrentSongId(newSongs[0].id);
       setEngineCurrentSong(newSongs[0].id);
     }
-  }, [isAuthenticated, saveSong, setEngineCurrentSong]);
-
-  const handleLogout = useCallback(async () => {
-    await signOut();
-    navigate('/auth', { replace: true });
-  }, [signOut, navigate]);
+  }, [setEngineCurrentSong]);
 
   // Update master volume in audio engine
   useEffect(() => {
     setEngineMasterVolume(masterVolume);
   }, [masterVolume, setEngineMasterVolume]);
 
-  // Loading states
-  if (authLoading || cloudLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Cloud className="w-5 h-5 animate-pulse" />
-          <span>Carregando...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading while demo is being created
-  if (!demoLoaded && audioEngineSongs.length === 0) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Music className="w-5 h-5 animate-pulse" />
-          <span>Carregando música demo...</span>
-        </div>
-      </div>
-    );
-  }
-
   if (!currentSong) {
     return (
-      <div className="h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground">Nenhuma música selecionada</p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowLibrary(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-          >
-            <Music className="w-4 h-4" />
-            Biblioteca
-          </button>
-          <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg"
-          >
-            <Plus className="w-4 h-4" />
-            Importar
-          </button>
-        </div>
-        
-        {/* Music Library Modal */}
-        {showLibrary && (
-          <MusicLibrary
-            songs={allLibrarySongs}
-            selectedIds={selectedSongIds}
-            onToggleSelect={handleToggleLibrarySong}
-            onDelete={deleteSong}
-            onClose={() => setShowLibrary(false)}
-          />
-        )}
-        
-        {/* Import Music Modal */}
-        {showImport && (
-          <ImportMusic
-            onImport={handleImportSongs}
-            onClose={() => setShowImport(false)}
-          />
-        )}
+      <div className="h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
       </div>
     );
   }
@@ -546,36 +227,8 @@ export default function Index() {
           </div>
         </div>
 
-        {/* Current Section Indicator */}
-        <CurrentSectionIndicator
-          sections={songSections.get(currentSong.id) || []}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-        />
-
         <div className="flex items-center gap-2">
-          {/* Cloud Sync Indicator */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50" title={syncing ? "Sincronizando..." : `${cloudSongs.length} música${cloudSongs.length !== 1 ? 's' : ''} na nuvem`}>
-            {syncing ? (
-              <>
-                <Cloud className="w-3.5 h-3.5 text-primary animate-pulse" />
-                <span className="text-[10px] text-primary animate-pulse">Salvando...</span>
-              </>
-            ) : (
-              <>
-                <Cloud className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">{cloudSongs.length}</span>
-              </>
-            )}
-          </div>
           <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
-          <button
-            onClick={handleLogout}
-            className="transport-btn min-w-[40px] min-h-[40px]"
-            title="Sair"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="transport-btn min-w-[40px] min-h-[40px]"
@@ -591,12 +244,6 @@ export default function Index() {
         onClose={() => setShowSettings(false)}
         onOpenLibrary={() => setShowLibrary(true)}
         onOpenImport={() => setShowImport(true)}
-        onOpenSectionEditor={() => setShowSectionEditor(true)}
-        cacheSize={formattedCacheSize}
-        onClearCache={async () => {
-          await clearCache();
-          toast.success('Cache limpo!');
-        }}
       />
 
       {/* Main Content - Landscape Layout */}
@@ -611,8 +258,6 @@ export default function Index() {
             tracks={activeTracks}
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
-            onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
-            waveformData={isImportedSong ? currentWaveformData : undefined}
           />
         </div>
 
@@ -630,19 +275,14 @@ export default function Index() {
       <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-1 flex items-center justify-between gap-4">
         <MasterControls
           masterVolume={masterVolume}
+          clickVolume={clickVolume}
           bpm={currentSong.bpm}
           isClickActive={isClickActive}
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
-          isFadingToClick={isFadingToClick}
-          isFadeRestoring={isFadeRestoring}
-          fadeProgress={fadeProgress}
-          voiceEnabled={voiceAnnouncementsEnabled}
-          stereoSplit={stereoSplit}
           onMasterVolumeChange={setMasterVolume}
-          onFadeToClickToggle={handleFadeToClickToggle}
-          onVoiceToggle={() => setVoiceAnnouncementsEnabled(prev => !prev)}
-          onStereoSplitChange={handleStereoSplitChange}
+          onClickVolumeChange={setClickVolume}
+          onClickToggle={() => setIsClickActive((prev) => !prev)}
         />
 
         <TransportControls
@@ -660,7 +300,6 @@ export default function Index() {
           songs={allLibrarySongs}
           selectedIds={selectedSongIds}
           onToggleSelect={handleToggleLibrarySong}
-          onDelete={deleteSong}
           onClose={() => setShowLibrary(false)}
         />
       )}
@@ -670,30 +309,6 @@ export default function Index() {
         <ImportMusic
           onImport={handleImportSongs}
           onClose={() => setShowImport(false)}
-        />
-      )}
-
-      {/* Section Editor Modal */}
-      {showSectionEditor && currentSong && (
-        <SectionEditor
-          songId={currentSong.id}
-          songName={currentSong.title}
-          duration={currentSong.duration}
-          currentTime={currentTime}
-          sections={songSections.get(currentSong.id) || []}
-          onSectionsChange={(sections) => {
-            if (isAuthenticated) {
-              saveSections(currentSong.id, sections);
-            } else {
-              setLocalSongSections(prev => {
-                const newMap = new Map(prev);
-                newMap.set(currentSong.id, sections);
-                return newMap;
-              });
-            }
-          }}
-          onSeek={handleSeek}
-          onClose={() => setShowSectionEditor(false)}
         />
       )}
     </div>

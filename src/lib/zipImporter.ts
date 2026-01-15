@@ -1,9 +1,8 @@
 import JSZip from 'jszip';
 import { audioEngine, Song, Track } from './audioEngine';
-import { detectBPMFromTracks } from './bpmDetector';
 
 export interface ImportProgress {
-  stage: 'extracting' | 'decoding' | 'analyzing' | 'complete';
+  stage: 'extracting' | 'decoding' | 'complete';
   currentFile: string;
   progress: number; // 0 to 100
 }
@@ -76,85 +75,48 @@ export async function importZipFile(
     onProgress?.({
       stage: 'extracting',
       currentFile: file.name,
-      progress: 15,
+      progress: 20,
     });
 
-    // Process audio files in PARALLEL for better performance
+    // Process each audio file
     const tracks: Track[] = [];
-    const audioBuffers: AudioBuffer[] = [];
     let maxDuration = 0;
-    let processedCount = 0;
-
-    // Extract all files first (parallel extraction)
-    const extractedFiles = await Promise.all(
-      audioFiles.map(async ({ path, zipEntry }) => ({
-        trackName: extractTrackName(path),
-        audioData: await zipEntry.async('arraybuffer'),
-      }))
-    );
-
-    onProgress?.({
-      stage: 'decoding',
-      currentFile: 'Decodificando áudio...',
-      progress: 30,
-    });
-
-    // Decode all audio files in parallel (batched to avoid memory issues)
-    const DECODE_BATCH_SIZE = 4;
-    for (let i = 0; i < extractedFiles.length; i += DECODE_BATCH_SIZE) {
-      const batch = extractedFiles.slice(i, i + DECODE_BATCH_SIZE);
+    
+    for (let i = 0; i < audioFiles.length; i++) {
+      const { path, zipEntry } = audioFiles[i];
+      const trackName = extractTrackName(path);
       
-      const batchResults = await Promise.all(
-        batch.map(async ({ trackName, audioData }) => {
-          const audioFile = new File([audioData], trackName, { type: 'audio/wav' });
-          const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
-          
-          processedCount++;
-          onProgress?.({
-            stage: 'decoding',
-            currentFile: trackName,
-            progress: 30 + Math.floor((processedCount / extractedFiles.length) * 45),
-          });
+      onProgress?.({
+        stage: 'decoding',
+        currentFile: trackName,
+        progress: 20 + Math.floor((i / audioFiles.length) * 70),
+      });
 
-          return { trackName, audioBuffer };
-        })
-      );
-
-      // Process results from this batch
-      for (const { trackName, audioBuffer } of batchResults) {
-        if (audioBuffer) {
-          maxDuration = Math.max(maxDuration, audioBuffer.duration);
-          audioBuffers.push(audioBuffer);
-        }
-
-        const track: Track = {
-          trackId: generateId(),
-          trackName,
-          audioBuffer,
-          volume: 1.0,
-          pan: 0,
-          isMuted: false,
-          isSolo: false,
-          gainNode: null,
-          panNode: null,
-          sourceNode: null,
-        };
-
-        tracks.push(track);
+      // Extract file content
+      const audioData = await zipEntry.async('arraybuffer');
+      
+      // Create a File-like object for decoding
+      const audioFile = new File([audioData], trackName, { type: 'audio/wav' });
+      
+      // Decode audio
+      const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
+      
+      if (audioBuffer) {
+        maxDuration = Math.max(maxDuration, audioBuffer.duration);
       }
+
+      const track: Track = {
+        trackId: generateId(),
+        trackName,
+        audioBuffer,
+        volume: 1.0,
+        isMuted: false,
+        gainNode: null,
+        sourceNode: null,
+      };
+
+      tracks.push(track);
     }
-
-    // Detect BPM from audio buffers
-    onProgress?.({
-      stage: 'analyzing',
-      currentFile: 'Detectando BPM...',
-      progress: 80,
-    });
-
-    const bpmResult = detectBPMFromTracks(audioBuffers);
-    const detectedBpm = bpmResult.bpm;
-
-    console.log(`BPM detectado para "${songName}": ${detectedBpm} (confiança: ${Math.round(bpmResult.confidence * 100)}%)`);
 
     onProgress?.({
       stage: 'complete',
@@ -168,7 +130,7 @@ export async function importZipFile(
       songName,
       tracks,
       duration: Math.ceil(maxDuration),
-      bpm: detectedBpm,
+      bpm: 120, // Default BPM, could be extracted from metadata
     };
 
     // Add song to audio engine
