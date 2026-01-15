@@ -44,13 +44,15 @@ function audioSongToUISong(audioSong: AudioSong): Song {
 }
 
 export default function Index() {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
+  
+  // Demo playback state (for songs without audio)
+  const [demoIsPlaying, setDemoIsPlaying] = useState(false);
+  const [demoCurrentTime, setDemoCurrentTime] = useState(0);
   
   // Audio Engine integration
   const { 
@@ -61,6 +63,14 @@ export default function Index() {
     handleTrackMuteToggle,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
+    // Playback controls from audio engine
+    isPlaying: engineIsPlaying,
+    currentTime: engineCurrentTime,
+    play: enginePlay,
+    pause: enginePause,
+    stop: engineStop,
+    seek: engineSeek,
+    togglePlayPause: engineTogglePlayPause,
   } = useAudioEngine();
   
   // Library & Setlist state
@@ -83,22 +93,26 @@ export default function Index() {
   const setlistSongs = allLibrarySongs.filter((s) => selectedSongIds.includes(s.id));
   const currentSong = allLibrarySongs.find((s) => s.id === currentSongId) || setlistSongs[0];
   
-  // Check if current song is from audio engine (has tracks)
+  // Check if current song is from audio engine (has real audio tracks)
   const isImportedSong = audioEngineSongs.some(s => s.id === currentSongId);
+  
+  // Use audio engine state for imported songs, demo state otherwise
+  const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
+  const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
     ? currentFaderTracks 
     : tracks;
 
-  // Simulate playback
+  // Simulate playback for demo songs only
   useEffect(() => {
-    if (!isPlaying || !currentSong) return;
+    if (isImportedSong || !demoIsPlaying || !currentSong) return;
 
     const interval = setInterval(() => {
-      setCurrentTime((prev) => {
+      setDemoCurrentTime((prev) => {
         if (prev >= currentSong.duration) {
-          setIsPlaying(false);
+          setDemoIsPlaying(false);
           return 0;
         }
         return prev + 0.1;
@@ -106,9 +120,9 @@ export default function Index() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentSong]);
+  }, [demoIsPlaying, currentSong, isImportedSong]);
 
-  // Simulate beat counter
+  // Beat counter
   useEffect(() => {
     if (!isPlaying || !currentSong) return;
 
@@ -121,28 +135,50 @@ export default function Index() {
   }, [isPlaying, currentSong]);
 
   const handlePlayPause = useCallback(() => {
-    setIsPlaying((prev) => !prev);
-  }, []);
+    if (isImportedSong) {
+      engineTogglePlayPause();
+    } else {
+      setDemoIsPlaying((prev) => !prev);
+    }
+  }, [isImportedSong, engineTogglePlayPause]);
 
   const handleStop = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
+    if (isImportedSong) {
+      engineStop();
+    } else {
+      setDemoIsPlaying(false);
+      setDemoCurrentTime(0);
+    }
     setCurrentBeat(1);
-  }, []);
+  }, [isImportedSong, engineStop]);
 
   const handlePrev = useCallback(() => {
-    setCurrentTime((prev) => Math.max(0, prev - 10));
-  }, []);
+    const newTime = Math.max(0, currentTime - 10);
+    if (isImportedSong) {
+      engineSeek(newTime);
+    } else {
+      setDemoCurrentTime(newTime);
+    }
+  }, [isImportedSong, currentTime, engineSeek]);
 
   const handleNext = useCallback(() => {
     if (currentSong) {
-      setCurrentTime((prev) => Math.min(currentSong.duration, prev + 10));
+      const newTime = Math.min(currentSong.duration, currentTime + 10);
+      if (isImportedSong) {
+        engineSeek(newTime);
+      } else {
+        setDemoCurrentTime(newTime);
+      }
     }
-  }, [currentSong]);
+  }, [currentSong, isImportedSong, currentTime, engineSeek]);
 
   const handleSeek = useCallback((time: number) => {
-    setCurrentTime(time);
-  }, []);
+    if (isImportedSong) {
+      engineSeek(time);
+    } else {
+      setDemoCurrentTime(time);
+    }
+  }, [isImportedSong, engineSeek]);
 
   // Handle volume change - route to appropriate handler
   const handleVolumeChange = useCallback((trackId: string, volume: number) => {
@@ -166,15 +202,20 @@ export default function Index() {
 
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
-    setCurrentTime(0);
-    setIsPlaying(false);
     setCurrentBeat(1);
     
-    // Also update audio engine if it's an imported song
+    // Stop current playback
+    if (audioEngineSongs.some(s => s.id === currentSongId)) {
+      engineStop();
+    }
+    setDemoIsPlaying(false);
+    setDemoCurrentTime(0);
+    
+    // Update audio engine if it's an imported song
     if (audioEngineSongs.some(s => s.id === song.id)) {
       setEngineCurrentSong(song.id);
     }
-  }, [audioEngineSongs, setEngineCurrentSong]);
+  }, [audioEngineSongs, setEngineCurrentSong, currentSongId, engineStop]);
 
   const handleToggleLibrarySong = useCallback((songId: string) => {
     setSelectedSongIds((prev) =>
