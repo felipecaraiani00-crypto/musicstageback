@@ -106,7 +106,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
   };
 
   const totalSize = files.reduce((acc, f) => acc + f.size, 0);
-  const maxSize = 200 * 1024 * 1024; // 200 MB
+  const maxSize = 700 * 1024 * 1024; // 700 MB - suporta arquivos grandes
 
   const getStatusIcon = (status: ImportedFile['status']) => {
     switch (status) {
@@ -153,7 +153,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
             />
           </div>
           <span className="text-xs font-mono text-muted-foreground">
-            {formatFileSize(totalSize)} / 200 MB
+            {formatFileSize(totalSize)} / 700 MB
           </span>
         </div>
       </div>
