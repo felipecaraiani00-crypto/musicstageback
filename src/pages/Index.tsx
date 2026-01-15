@@ -200,13 +200,8 @@ export default function Index() {
     setEngineMasterVolume(masterVolume);
   }, [masterVolume, setEngineMasterVolume]);
 
-  if (!currentSong) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Selecione músicas na biblioteca</p>
-      </div>
-    );
-  }
+  // Use first demo song as fallback
+  const displaySong = currentSong || demoSongs[0];
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden relative">
@@ -219,16 +214,16 @@ export default function Index() {
           <div>
             <h1 className="text-sm font-semibold flex items-center gap-1.5">
               <Music className="w-4 h-4 text-primary" />
-              {currentSong.title}
+              {displaySong.title}
             </h1>
             <p className="text-[10px] text-muted-foreground">
-              {currentSong.artist || `${currentSong.trackCount} tracks`}
+              {displaySong.artist || `${displaySong.trackCount || 0} tracks`}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <TimeDisplay currentTime={currentTime} totalDuration={currentSong.duration} />
+          <TimeDisplay currentTime={currentTime} totalDuration={displaySong.duration} />
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="transport-btn min-w-[40px] min-h-[40px]"
@@ -252,7 +247,7 @@ export default function Index() {
         <div className="flex-1 min-w-0">
           <SongViewer
             currentTime={currentTime}
-            totalDuration={currentSong.duration}
+            totalDuration={displaySong.duration}
             isPlaying={isPlaying}
             onSeek={handleSeek}
             tracks={activeTracks}
@@ -276,7 +271,7 @@ export default function Index() {
         <MasterControls
           masterVolume={masterVolume}
           clickVolume={clickVolume}
-          bpm={currentSong.bpm}
+          bpm={displaySong.bpm}
           isClickActive={isClickActive}
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
