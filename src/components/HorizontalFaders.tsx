@@ -11,6 +11,8 @@ export interface FaderTrack {
   volume: number;
   isMuted?: boolean;
   isSoloed?: boolean;
+  pan?: number;
+  isClickTrack?: boolean;
 }
 
 interface HorizontalFadersProps {
