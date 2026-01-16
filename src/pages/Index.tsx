@@ -78,8 +78,9 @@ export default function Index() {
     togglePlayPause: engineTogglePlayPause,
   } = useAudioEngine();
 
-  // Track if audio is split L/R
-  const [isSplitLR, setIsSplitLR] = useState(false);
+  // Track split mode: "off" | "clickLeft" | "clickRight"
+  type SplitMode = "off" | "clickLeft" | "clickRight";
+  const [splitMode, setSplitMode] = useState<SplitMode>("off");
   
   // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
@@ -235,17 +236,15 @@ export default function Index() {
     }
   }, [isImportedSong, handleTrackSoloToggle]);
 
-  // Handle split L/R
-  const handleSplitLR = useCallback((clickToLeft: boolean) => {
-    splitClickAndInstruments(clickToLeft);
-    setIsSplitLR(true);
-  }, [splitClickAndInstruments]);
-
-  // Handle reset pans
-  const handleResetPans = useCallback(() => {
-    resetPans();
-    setIsSplitLR(false);
-  }, [resetPans]);
+  // Handle split mode change
+  const handleSplitModeChange = useCallback((mode: SplitMode) => {
+    setSplitMode(mode);
+    if (mode === "off") {
+      resetPans();
+    } else {
+      splitClickAndInstruments(mode === "clickLeft");
+    }
+  }, [splitClickAndInstruments, resetPans]);
 
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
@@ -342,9 +341,6 @@ export default function Index() {
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
             onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
-            onSplitLR={isImportedSong ? handleSplitLR : undefined}
-            onResetPans={isImportedSong ? handleResetPans : undefined}
-            isSplit={isSplitLR}
           />
         </div>
 
@@ -371,6 +367,9 @@ export default function Index() {
           onClickVolumeChange={setClickVolume}
           onClickToggle={() => setIsClickActive((prev) => !prev)}
           onBpmChange={handleBpmChange}
+          splitMode={splitMode}
+          onSplitModeChange={handleSplitModeChange}
+          showSplitControl={isImportedSong}
         />
 
         <TransportControls
