@@ -11,6 +11,7 @@ import { SettingsMenu } from "@/components/SettingsMenu";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { Song as AudioSong } from "@/lib/audioEngine";
+import { metronome } from "@/lib/metronome";
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
@@ -134,17 +135,27 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [demoIsPlaying, currentSong, isImportedSong]);
 
-  // Beat counter
+  // Metronome control
   useEffect(() => {
-    if (!isPlaying) return;
+    metronome.setVolume(clickVolume / 100);
+  }, [clickVolume]);
 
-    const beatDuration = 60 / effectiveBpm;
-    const interval = setInterval(() => {
-      setCurrentBeat((prev) => (prev % BEATS_PER_BAR) + 1);
-    }, beatDuration * 1000);
+  useEffect(() => {
+    if (isPlaying && isClickActive) {
+      metronome.start(effectiveBpm, (beat) => {
+        setCurrentBeat(beat);
+      });
+    } else {
+      metronome.stop();
+      if (!isPlaying) {
+        setCurrentBeat(1);
+      }
+    }
 
-    return () => clearInterval(interval);
-  }, [isPlaying, effectiveBpm]);
+    return () => {
+      metronome.stop();
+    };
+  }, [isPlaying, isClickActive, effectiveBpm]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
