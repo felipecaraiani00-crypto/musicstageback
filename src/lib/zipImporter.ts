@@ -26,6 +26,13 @@ function isAudioFile(filename: string): boolean {
   return audioExtensions.some(ext => lowerName.endsWith(ext));
 }
 
+// Check if track is a click/guide track based on name
+function isClickTrack(filename: string): boolean {
+  const lowerName = filename.toLowerCase();
+  const clickKeywords = ['click', 'guide', 'metronome', 'metro', 'count', 'cue', 'guia'];
+  return clickKeywords.some(keyword => lowerName.includes(keyword));
+}
+
 // Get track name from audio filename
 function extractTrackName(filepath: string): string {
   // Get just the filename (remove path)
@@ -131,14 +138,19 @@ export async function importZipFile(
           maxDuration = Math.max(maxDuration, audioBuffer.duration);
         }
 
+        const isClick = isClickTrack(trackName);
+        
         const track: Track = {
           trackId: generateId(),
           trackName,
           audioBuffer,
           volume: 1.0,
+          pan: 0, // Center by default
           isMuted: false,
           isSoloed: false,
+          isClickTrack: isClick,
           gainNode: null,
+          panNode: null,
           sourceNode: null,
         };
 

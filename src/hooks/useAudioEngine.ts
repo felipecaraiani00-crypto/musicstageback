@@ -39,6 +39,8 @@ export function useAudioEngine() {
       volume: Math.round(track.volume * 100),
       isMuted: track.isMuted,
       isSoloed: track.isSoloed,
+      pan: track.pan,
+      isClickTrack: track.isClickTrack,
     }));
   }, []);
 
@@ -55,6 +57,16 @@ export function useAudioEngine() {
   // Handle solo toggle
   const handleTrackSoloToggle = useCallback((trackId: string) => {
     return audioEngine.toggleTrackSolo(trackId);
+  }, []);
+
+  // Split click to one side and instruments to other
+  const splitClickAndInstruments = useCallback((clickToLeft: boolean = true) => {
+    audioEngine.splitClickAndInstruments(clickToLeft);
+  }, []);
+
+  // Reset all pans to center
+  const resetPans = useCallback(() => {
+    audioEngine.resetPans();
   }, []);
 
   // Set master volume (0-100)
@@ -106,6 +118,8 @@ export function useAudioEngine() {
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     handleTrackSoloToggle,
+    splitClickAndInstruments,
+    resetPans,
     setMasterVolume,
     setCurrentSong,
     // Playback

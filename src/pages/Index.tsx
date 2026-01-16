@@ -64,6 +64,8 @@ export default function Index() {
     handleTrackVolumeChange,
     handleTrackMuteToggle,
     handleTrackSoloToggle,
+    splitClickAndInstruments,
+    resetPans,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     // Playback controls from audio engine
@@ -75,6 +77,9 @@ export default function Index() {
     seek: engineSeek,
     togglePlayPause: engineTogglePlayPause,
   } = useAudioEngine();
+
+  // Track if audio is split L/R
+  const [isSplitLR, setIsSplitLR] = useState(false);
   
   // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
@@ -230,6 +235,18 @@ export default function Index() {
     }
   }, [isImportedSong, handleTrackSoloToggle]);
 
+  // Handle split L/R
+  const handleSplitLR = useCallback((clickToLeft: boolean) => {
+    splitClickAndInstruments(clickToLeft);
+    setIsSplitLR(true);
+  }, [splitClickAndInstruments]);
+
+  // Handle reset pans
+  const handleResetPans = useCallback(() => {
+    resetPans();
+    setIsSplitLR(false);
+  }, [resetPans]);
+
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
     setCurrentBeat(1);
@@ -325,6 +342,9 @@ export default function Index() {
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
             onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
+            onSplitLR={isImportedSong ? handleSplitLR : undefined}
+            onResetPans={isImportedSong ? handleResetPans : undefined}
+            isSplit={isSplitLR}
           />
         </div>
 

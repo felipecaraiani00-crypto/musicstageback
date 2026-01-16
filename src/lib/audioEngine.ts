@@ -5,9 +5,12 @@ export interface Track {
   trackName: string;
   audioBuffer: AudioBuffer | null;
   volume: number; // 0.0 to 1.0
+  pan: number; // -1.0 (left) to 1.0 (right)
   isMuted: boolean;
   isSoloed: boolean;
+  isClickTrack: boolean; // True for click/guide tracks
   gainNode: GainNode | null;
+  panNode: StereoPannerNode | null;
   sourceNode: AudioBufferSourceNode | null;
 }
 
@@ -98,12 +101,20 @@ class AudioEngine {
   addSong(song: Song): void {
     const context = this.ensureContext();
     
-    // Create gain nodes for each track
+    // Create gain and pan nodes for each track
     song.tracks.forEach(track => {
       const gainNode = context.createGain();
+      const panNode = context.createStereoPanner();
+      
       gainNode.gain.value = track.volume;
-      gainNode.connect(this.masterGainNode!);
+      panNode.pan.value = track.pan;
+      
+      // Chain: source -> gain -> pan -> master
+      gainNode.connect(panNode);
+      panNode.connect(this.masterGainNode!);
+      
       track.gainNode = gainNode;
+      track.panNode = panNode;
       this.trackGainNodes.set(track.trackId, gainNode);
     });
 
@@ -394,6 +405,61 @@ class AudioEngine {
         return;
       }
     }
+  }
+
+  // Set track pan (-1 = left, 0 = center, 1 = right)
+  setTrackPan(trackId: string, pan: number): void {
+    const clampedPan = Math.max(-1, Math.min(1, pan));
+    
+    for (const song of this.songs.values()) {
+      const track = song.tracks.find(t => t.trackId === trackId);
+      if (track) {
+        track.pan = clampedPan;
+        
+        if (track.panNode) {
+          track.panNode.pan.setValueAtTime(clampedPan, this.audioContext?.currentTime || 0);
+        }
+        
+        this.notifyListeners();
+        return;
+      }
+    }
+  }
+
+  // Split click tracks to left and instruments to right
+  splitClickAndInstruments(clickToLeft: boolean = true): void {
+    const song = this.getCurrentSong();
+    if (!song) return;
+    
+    const clickPan = clickToLeft ? -1 : 1;
+    const instrumentPan = clickToLeft ? 1 : -1;
+    
+    song.tracks.forEach(track => {
+      const targetPan = track.isClickTrack ? clickPan : instrumentPan;
+      track.pan = targetPan;
+      
+      if (track.panNode) {
+        track.panNode.pan.setValueAtTime(targetPan, this.audioContext?.currentTime || 0);
+      }
+    });
+    
+    this.notifyListeners();
+  }
+
+  // Reset all pans to center
+  resetPans(): void {
+    const song = this.getCurrentSong();
+    if (!song) return;
+    
+    song.tracks.forEach(track => {
+      track.pan = 0;
+      
+      if (track.panNode) {
+        track.panNode.pan.setValueAtTime(0, this.audioContext?.currentTime || 0);
+      }
+    });
+    
+    this.notifyListeners();
   }
 
   // Set master volume
