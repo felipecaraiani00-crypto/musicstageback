@@ -61,6 +61,7 @@ export default function Index() {
     currentFaderTracks,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
+    handleTrackSoloToggle,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     // Playback controls from audio engine
@@ -200,6 +201,13 @@ export default function Index() {
     }
   }, [isImportedSong, handleTrackMuteToggle]);
 
+  // Handle solo toggle
+  const handleSoloToggle = useCallback((trackId: string) => {
+    if (isImportedSong) {
+      handleTrackSoloToggle(trackId);
+    }
+  }, [isImportedSong, handleTrackSoloToggle]);
+
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
     setCurrentBeat(1);
@@ -294,6 +302,7 @@ export default function Index() {
             tracks={activeTracks}
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
+            onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
           />
         </div>
 

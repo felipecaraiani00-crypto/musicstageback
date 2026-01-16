@@ -38,6 +38,7 @@ export function useAudioEngine() {
       color: getTrackColor(track.trackName),
       volume: Math.round(track.volume * 100),
       isMuted: track.isMuted,
+      isSoloed: track.isSoloed,
     }));
   }, []);
 
@@ -49,6 +50,11 @@ export function useAudioEngine() {
   // Handle mute toggle
   const handleTrackMuteToggle = useCallback((trackId: string) => {
     return audioEngine.toggleTrackMute(trackId);
+  }, []);
+
+  // Handle solo toggle
+  const handleTrackSoloToggle = useCallback((trackId: string) => {
+    return audioEngine.toggleTrackSolo(trackId);
   }, []);
 
   // Set master volume (0-100)
@@ -99,6 +105,7 @@ export function useAudioEngine() {
     getFaderTracks,
     handleTrackVolumeChange,
     handleTrackMuteToggle,
+    handleTrackSoloToggle,
     setMasterVolume,
     setCurrentSong,
     // Playback

@@ -6,6 +6,7 @@ export interface Track {
   audioBuffer: AudioBuffer | null;
   volume: number; // 0.0 to 1.0
   isMuted: boolean;
+  isSoloed: boolean;
   gainNode: GainNode | null;
   sourceNode: AudioBufferSourceNode | null;
 }
@@ -339,17 +340,47 @@ class AudioEngine {
       const track = song.tracks.find(t => t.trackId === trackId);
       if (track) {
         track.isMuted = !track.isMuted;
-        
-        if (track.gainNode) {
-          const targetVolume = track.isMuted ? 0 : track.volume;
-          track.gainNode.gain.setValueAtTime(targetVolume, this.audioContext?.currentTime || 0);
-        }
-        
+        this.updateTrackGains(song);
         this.notifyListeners();
         return track.isMuted;
       }
     }
     return false;
+  }
+
+  // Toggle track solo
+  toggleTrackSolo(trackId: string): boolean {
+    for (const song of this.songs.values()) {
+      const track = song.tracks.find(t => t.trackId === trackId);
+      if (track) {
+        track.isSoloed = !track.isSoloed;
+        this.updateTrackGains(song);
+        this.notifyListeners();
+        return track.isSoloed;
+      }
+    }
+    return false;
+  }
+
+  // Update all track gains based on mute/solo state
+  private updateTrackGains(song: Song): void {
+    const hasSoloedTrack = song.tracks.some(t => t.isSoloed);
+    
+    song.tracks.forEach(track => {
+      if (track.gainNode) {
+        let targetVolume: number;
+        
+        if (track.isMuted) {
+          targetVolume = 0;
+        } else if (hasSoloedTrack && !track.isSoloed) {
+          targetVolume = 0;
+        } else {
+          targetVolume = track.volume;
+        }
+        
+        track.gainNode.gain.setValueAtTime(targetVolume, this.audioContext?.currentTime || 0);
+      }
+    });
   }
 
   // Set mute state explicitly
@@ -358,12 +389,7 @@ class AudioEngine {
       const track = song.tracks.find(t => t.trackId === trackId);
       if (track) {
         track.isMuted = muted;
-        
-        if (track.gainNode) {
-          const targetVolume = muted ? 0 : track.volume;
-          track.gainNode.gain.setValueAtTime(targetVolume, this.audioContext?.currentTime || 0);
-        }
-        
+        this.updateTrackGains(song);
         this.notifyListeners();
         return;
       }
