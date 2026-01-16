@@ -49,6 +49,7 @@ export default function Index() {
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
+  const [customBpm, setCustomBpm] = useState<Record<string, number>>({});
   
   // Demo playback state (for songs without audio)
   const [demoIsPlaying, setDemoIsPlaying] = useState(false);
@@ -101,10 +102,20 @@ export default function Index() {
   const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
+  // Get effective BPM (custom or from song)
+  const effectiveBpm = currentSong ? (customBpm[currentSong.id] ?? currentSong.bpm) : 120;
+  
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
     ? currentFaderTracks 
     : tracks;
+
+  // Handle BPM change
+  const handleBpmChange = useCallback((newBpm: number) => {
+    if (currentSong) {
+      setCustomBpm(prev => ({ ...prev, [currentSong.id]: newBpm }));
+    }
+  }, [currentSong]);
 
   // Simulate playback for demo songs only
   useEffect(() => {
@@ -125,15 +136,15 @@ export default function Index() {
 
   // Beat counter
   useEffect(() => {
-    if (!isPlaying || !currentSong) return;
+    if (!isPlaying) return;
 
-    const beatDuration = 60 / currentSong.bpm;
+    const beatDuration = 60 / effectiveBpm;
     const interval = setInterval(() => {
       setCurrentBeat((prev) => (prev % BEATS_PER_BAR) + 1);
     }, beatDuration * 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentSong]);
+  }, [isPlaying, effectiveBpm]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
@@ -321,13 +332,14 @@ export default function Index() {
         <MasterControls
           masterVolume={masterVolume}
           clickVolume={clickVolume}
-          bpm={displaySong.bpm}
+          bpm={effectiveBpm}
           isClickActive={isClickActive}
           currentBeat={currentBeat}
           beatsPerBar={BEATS_PER_BAR}
           onMasterVolumeChange={setMasterVolume}
           onClickVolumeChange={setClickVolume}
           onClickToggle={() => setIsClickActive((prev) => !prev)}
+          onBpmChange={handleBpmChange}
         />
 
         <TransportControls
