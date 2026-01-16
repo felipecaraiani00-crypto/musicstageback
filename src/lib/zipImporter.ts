@@ -137,6 +137,7 @@ export async function importZipFile(
           audioBuffer,
           volume: 1.0,
           isMuted: false,
+          isSoloed: false,
           gainNode: null,
           sourceNode: null,
         };
