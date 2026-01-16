@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface WaveformViewProps {
@@ -16,6 +16,8 @@ export function WaveformView({
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const [displayProgress, setDisplayProgress] = useState(0);
 
   // Generate fake waveform data
   const generateWaveform = () => {
@@ -32,16 +34,23 @@ export function WaveformView({
   };
 
   const waveformData = useRef(generateWaveform());
-  const progressPercent = (currentTime / totalDuration) * 100;
+  
+  // Calculate progress percent
+  const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+
+  // Smooth animation update
+  useEffect(() => {
+    setDisplayProgress(progressPercent);
+  }, [progressPercent]);
 
   // Auto-scroll to keep playhead visible
   useEffect(() => {
     if (containerRef.current && isPlaying) {
       const container = containerRef.current;
-      const scrollPosition = (progressPercent / 100) * container.scrollWidth - container.clientWidth / 2;
+      const scrollPosition = (displayProgress / 100) * container.scrollWidth - container.clientWidth / 2;
       container.scrollTo({ left: Math.max(0, scrollPosition), behavior: "smooth" });
     }
-  }, [currentTime, isPlaying, progressPercent]);
+  }, [displayProgress, isPlaying]);
 
   // Draw waveform on canvas
   useEffect(() => {
@@ -61,7 +70,7 @@ export function WaveformView({
     const width = rect.width;
     const height = rect.height;
     const barWidth = width / waveformData.current.length;
-    const playedBars = Math.floor((progressPercent / 100) * waveformData.current.length);
+    const playedBars = Math.floor((displayProgress / 100) * waveformData.current.length);
 
     ctx.clearRect(0, 0, width, height);
 
@@ -70,16 +79,23 @@ export function WaveformView({
       const x = i * barWidth;
       const y = (height - barHeight) / 2;
 
-      // Played portion in primary color, unplayed in muted
+      // Played portion in primary color with gradient effect, unplayed in muted
       if (i < playedBars) {
-        ctx.fillStyle = "hsl(190, 95%, 50%)";
+        // Create subtle pulse effect near the playhead
+        const distanceFromPlayhead = playedBars - i;
+        if (distanceFromPlayhead < 5) {
+          const brightness = 50 + (5 - distanceFromPlayhead) * 3;
+          ctx.fillStyle = `hsl(190, 95%, ${brightness}%)`;
+        } else {
+          ctx.fillStyle = "hsl(190, 95%, 50%)";
+        }
       } else {
         ctx.fillStyle = "hsl(220, 15%, 30%)";
       }
 
       ctx.fillRect(x, y, barWidth - 1, barHeight);
     });
-  }, [progressPercent]);
+  }, [displayProgress]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
@@ -107,12 +123,27 @@ export function WaveformView({
           style={{ width: "100%", height: "100%" }}
         />
         
-        {/* Playhead */}
+        {/* Playhead - follows music in real-time */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg pointer-events-none transition-all duration-100"
-          style={{ left: `${progressPercent}%` }}
+          className={cn(
+            "absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg pointer-events-none",
+            isPlaying && "transition-none"
+          )}
+          style={{ 
+            left: `${displayProgress}%`,
+            boxShadow: "0 0 8px hsl(var(--accent)), 0 0 16px hsl(var(--accent) / 0.5)"
+          }}
         >
+          {/* Playhead triangle marker */}
           <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-2 h-2 bg-accent rotate-45" />
+          
+          {/* Glow effect when playing */}
+          {isPlaying && (
+            <div 
+              className="absolute top-0 bottom-0 w-1 -left-0.5 bg-accent/30 animate-pulse"
+              style={{ filter: "blur(4px)" }}
+            />
+          )}
         </div>
       </div>
     </div>
