@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Volume2, Disc3, Edit2, Check } from "lucide-react";
+import { Volume2, Disc3, Edit2, Check, Headphones } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+
+type SplitMode = "off" | "clickLeft" | "clickRight";
 
 interface MasterControlsProps {
   masterVolume: number;
@@ -14,6 +16,9 @@ interface MasterControlsProps {
   onClickVolumeChange: (volume: number) => void;
   onClickToggle: () => void;
   onBpmChange?: (bpm: number) => void;
+  splitMode?: SplitMode;
+  onSplitModeChange?: (mode: SplitMode) => void;
+  showSplitControl?: boolean;
 }
 
 export function MasterControls({
@@ -27,6 +32,9 @@ export function MasterControls({
   onClickVolumeChange,
   onClickToggle,
   onBpmChange,
+  splitMode = "off",
+  onSplitModeChange,
+  showSplitControl = false,
 }: MasterControlsProps) {
   const [isEditingBpm, setIsEditingBpm] = useState(false);
   const [editBpmValue, setEditBpmValue] = useState(bpm.toString());
@@ -53,6 +61,29 @@ export function MasterControls({
   const startEditing = () => {
     setEditBpmValue(bpm.toString());
     setIsEditingBpm(true);
+  };
+
+  const cycleSplitMode = () => {
+    const modes: SplitMode[] = ["off", "clickLeft", "clickRight"];
+    const currentIndex = modes.indexOf(splitMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    onSplitModeChange?.(modes[nextIndex]);
+  };
+
+  const getSplitLabel = () => {
+    switch (splitMode) {
+      case "clickLeft": return "C←|→I";
+      case "clickRight": return "I←|→C";
+      default: return "L|R";
+    }
+  };
+
+  const getSplitTitle = () => {
+    switch (splitMode) {
+      case "clickLeft": return "Click à esquerda, Instrumentos à direita";
+      case "clickRight": return "Click à direita, Instrumentos à esquerda";
+      default: return "Separar Click e Instrumentos";
+    }
   };
 
   return (
@@ -142,20 +173,40 @@ export function MasterControls({
         </div>
       </div>
 
-      {/* Master Volume */}
-      <div className="flex items-center gap-1">
-        <Volume2 className="w-4 h-4 text-muted-foreground" />
-        <div className="flex items-center gap-1 w-[80px]">
-          <Slider
-            value={[masterVolume]}
-            max={100}
-            step={1}
-            onValueChange={([value]) => onMasterVolumeChange(value)}
-            className="flex-1"
-          />
-          <span className="text-[10px] font-mono text-muted-foreground w-6">
-            {masterVolume}
-          </span>
+      {/* Master Volume + Split Control */}
+      <div className="flex items-center gap-2">
+        {/* L/R Split Control */}
+        {showSplitControl && onSplitModeChange && (
+          <button
+            onClick={cycleSplitMode}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all min-w-[50px] justify-center",
+              splitMode !== "off"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            )}
+            title={getSplitTitle()}
+          >
+            <Headphones className="w-3 h-3" />
+            <span>{getSplitLabel()}</span>
+          </button>
+        )}
+
+        {/* Master Volume */}
+        <div className="flex items-center gap-1">
+          <Volume2 className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center gap-1 w-[80px]">
+            <Slider
+              value={[masterVolume]}
+              max={100}
+              step={1}
+              onValueChange={([value]) => onMasterVolumeChange(value)}
+              className="flex-1"
+            />
+            <span className="text-[10px] font-mono text-muted-foreground w-6">
+              {masterVolume}
+            </span>
+          </div>
         </div>
       </div>
     </div>
