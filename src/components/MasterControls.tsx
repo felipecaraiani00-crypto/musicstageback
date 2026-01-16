@@ -1,4 +1,5 @@
-import { Volume2, Disc3 } from "lucide-react";
+import { useState } from "react";
+import { Volume2, Disc3, Edit2, Check } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,7 @@ interface MasterControlsProps {
   onMasterVolumeChange: (volume: number) => void;
   onClickVolumeChange: (volume: number) => void;
   onClickToggle: () => void;
+  onBpmChange?: (bpm: number) => void;
 }
 
 export function MasterControls({
@@ -24,15 +26,72 @@ export function MasterControls({
   onMasterVolumeChange,
   onClickVolumeChange,
   onClickToggle,
+  onBpmChange,
 }: MasterControlsProps) {
+  const [isEditingBpm, setIsEditingBpm] = useState(false);
+  const [editBpmValue, setEditBpmValue] = useState(bpm.toString());
+
+  const handleBpmSubmit = () => {
+    const newBpm = parseInt(editBpmValue, 10);
+    if (!isNaN(newBpm) && newBpm >= 20 && newBpm <= 300) {
+      onBpmChange?.(newBpm);
+    } else {
+      setEditBpmValue(bpm.toString());
+    }
+    setIsEditingBpm(false);
+  };
+
+  const handleBpmKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleBpmSubmit();
+    } else if (e.key === "Escape") {
+      setEditBpmValue(bpm.toString());
+      setIsEditingBpm(false);
+    }
+  };
+
+  const startEditing = () => {
+    setEditBpmValue(bpm.toString());
+    setIsEditingBpm(true);
+  };
+
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
-      {/* BPM Display */}
+      {/* BPM Display/Edit */}
       <div className="flex items-center gap-2">
         <div className="text-center">
-          <div className="text-xl font-mono font-bold text-primary text-glow-primary leading-none">
-            {bpm}
-          </div>
+          {isEditingBpm ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={20}
+                max={300}
+                value={editBpmValue}
+                onChange={(e) => setEditBpmValue(e.target.value)}
+                onKeyDown={handleBpmKeyDown}
+                onBlur={handleBpmSubmit}
+                autoFocus
+                className="w-14 text-xl font-mono font-bold text-primary bg-secondary border border-primary/50 rounded px-1 text-center focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button
+                onClick={handleBpmSubmit}
+                className="p-1 rounded hover:bg-secondary"
+              >
+                <Check className="w-3 h-3 text-primary" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={startEditing}
+              className="group flex items-center gap-1 hover:bg-secondary/50 rounded px-1 transition-colors"
+              title="Clique para editar BPM"
+            >
+              <div className="text-xl font-mono font-bold text-primary text-glow-primary leading-none">
+                {bpm}
+              </div>
+              <Edit2 className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
           <div className="text-[9px] text-muted-foreground uppercase tracking-wider">
             BPM
           </div>
