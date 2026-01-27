@@ -66,6 +66,8 @@ export default function Index() {
     handleTrackSoloToggle,
     splitClickAndInstruments,
     resetPans,
+    toggleInstrumentsFade,
+    areInstrumentsFaded,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     // Playback controls from audio engine
@@ -81,6 +83,7 @@ export default function Index() {
   // Track split mode: "off" | "clickLeft" | "clickRight"
   type SplitMode = "off" | "clickLeft" | "clickRight";
   const [splitMode, setSplitMode] = useState<SplitMode>("off");
+  const [instrumentsFaded, setInstrumentsFaded] = useState(false);
   
   // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
@@ -246,6 +249,11 @@ export default function Index() {
     }
   }, [splitClickAndInstruments, resetPans]);
 
+  // Handle instrument fade toggle
+  const handleInstrumentsFadeToggle = useCallback(() => {
+    toggleInstrumentsFade();
+    setInstrumentsFaded(prev => !prev);
+  }, [toggleInstrumentsFade]);
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
     setCurrentBeat(1);
@@ -370,6 +378,8 @@ export default function Index() {
           splitMode={splitMode}
           onSplitModeChange={handleSplitModeChange}
           showSplitControl={isImportedSong}
+          instrumentsFaded={instrumentsFaded}
+          onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
         />
 
         <TransportControls

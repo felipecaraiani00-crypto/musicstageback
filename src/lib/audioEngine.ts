@@ -46,6 +46,10 @@ class AudioEngine {
   private pauseTime: number = 0; // Position in song when paused
   private playbackListeners: Set<PlaybackListener> = new Set();
   private animationFrameId: number | null = null;
+  
+  // Instrument fade state
+  private instrumentsFaded: boolean = false;
+  private savedInstrumentVolumes: Map<string, number> = new Map();
 
   constructor() {
     this.initAudioContext();
@@ -460,6 +464,49 @@ class AudioEngine {
     });
     
     this.notifyListeners();
+  }
+
+  // Fade instruments out (leave only click), or fade them back in
+  fadeInstruments(fadeOut: boolean, duration: number = 1.5): void {
+    const song = this.getCurrentSong();
+    if (!song) return;
+    
+    const context = this.audioContext;
+    if (!context) return;
+    
+    const currentTime = context.currentTime;
+    
+    song.tracks.forEach(track => {
+      // Skip click tracks - they stay audible
+      if (track.isClickTrack) return;
+      
+      if (!track.gainNode) return;
+      
+      if (fadeOut) {
+        // Save current volume before fading out
+        this.savedInstrumentVolumes.set(track.trackId, track.volume);
+        
+        // Cancel any ongoing ramps and fade to near zero
+        track.gainNode.gain.cancelScheduledValues(currentTime);
+        track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, currentTime);
+        track.gainNode.gain.linearRampToValueAtTime(0.001, currentTime + duration);
+      } else {
+        // Fade back in to saved volume
+        const savedVolume = this.savedInstrumentVolumes.get(track.trackId) ?? track.volume;
+        
+        track.gainNode.gain.cancelScheduledValues(currentTime);
+        track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, currentTime);
+        track.gainNode.gain.linearRampToValueAtTime(savedVolume, currentTime + duration);
+      }
+    });
+    
+    this.instrumentsFaded = fadeOut;
+    this.notifyListeners();
+  }
+
+  // Check if instruments are currently faded
+  areInstrumentsFaded(): boolean {
+    return this.instrumentsFaded;
   }
 
   // Set master volume

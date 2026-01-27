@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Volume2, Disc3, Edit2, Check, Headphones } from "lucide-react";
+import { Volume2, Disc3, Edit2, Check, Headphones, VolumeX } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,8 @@ interface MasterControlsProps {
   splitMode?: SplitMode;
   onSplitModeChange?: (mode: SplitMode) => void;
   showSplitControl?: boolean;
+  instrumentsFaded?: boolean;
+  onInstrumentsFadeToggle?: () => void;
 }
 
 export function MasterControls({
@@ -35,6 +37,8 @@ export function MasterControls({
   splitMode = "off",
   onSplitModeChange,
   showSplitControl = false,
+  instrumentsFaded = false,
+  onInstrumentsFadeToggle,
 }: MasterControlsProps) {
   const [isEditingBpm, setIsEditingBpm] = useState(false);
   const [editBpmValue, setEditBpmValue] = useState(bpm.toString());
@@ -173,8 +177,25 @@ export function MasterControls({
         </div>
       </div>
 
-      {/* Master Volume + Split Control */}
+      {/* Master Volume + Split Control + Fade Button */}
       <div className="flex items-center gap-2">
+        {/* Instrument Fade Button */}
+        {showSplitControl && onInstrumentsFadeToggle && (
+          <button
+            onClick={onInstrumentsFadeToggle}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all min-w-[50px] justify-center",
+              instrumentsFaded
+                ? "bg-destructive text-destructive-foreground animate-pulse"
+                : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            )}
+            title={instrumentsFaded ? "Trazer instrumentos de volta" : "Silenciar instrumentos (só click)"}
+          >
+            <VolumeX className="w-3 h-3" />
+            <span>{instrumentsFaded ? "FADE" : "INST"}</span>
+          </button>
+        )}
+
         {/* L/R Split Control */}
         {showSplitControl && onSplitModeChange && (
           <button
