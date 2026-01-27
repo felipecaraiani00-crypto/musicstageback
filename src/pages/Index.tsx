@@ -50,7 +50,7 @@ export default function Index() {
   const [clickVolume, setClickVolume] = useState(75);
   const [isClickActive, setIsClickActive] = useState(true);
   const [currentBeat, setCurrentBeat] = useState(1);
-  const [customBpm, setCustomBpm] = useState<Record<string, number>>({});
+  
   
   // Demo playback state (for songs without audio)
   const [demoIsPlaying, setDemoIsPlaying] = useState(false);
@@ -112,20 +112,13 @@ export default function Index() {
   const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
-  // Get effective BPM (custom or from song)
-  const effectiveBpm = currentSong ? (customBpm[currentSong.id] ?? currentSong.bpm) : 120;
+  // Get BPM from song
+  const effectiveBpm = currentSong?.bpm || 120;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
     ? currentFaderTracks 
     : tracks;
-
-  // Handle BPM change
-  const handleBpmChange = useCallback((newBpm: number) => {
-    if (currentSong) {
-      setCustomBpm(prev => ({ ...prev, [currentSong.id]: newBpm }));
-    }
-  }, [currentSong]);
 
   // Simulate playback for demo songs only
   useEffect(() => {
@@ -374,7 +367,6 @@ export default function Index() {
           onMasterVolumeChange={setMasterVolume}
           onClickVolumeChange={setClickVolume}
           onClickToggle={() => setIsClickActive((prev) => !prev)}
-          onBpmChange={handleBpmChange}
           splitMode={splitMode}
           onSplitModeChange={handleSplitModeChange}
           showSplitControl={isImportedSong}
