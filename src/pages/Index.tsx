@@ -8,8 +8,10 @@ import { SongList, Song } from "@/components/SongList";
 import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
+import { SectionEditor } from "@/components/SectionEditor";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
+import { useSections } from "@/hooks/useSections";
 import { Song as AudioSong } from "@/lib/audioEngine";
 import { metronome } from "@/lib/metronome";
 
@@ -94,6 +96,10 @@ export default function Index() {
   const [showSettings, setShowSettings] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showSectionEditor, setShowSectionEditor] = useState(false);
+
+  // Sections hook
+  const { getSectionsForSong, addSection, updateSection, deleteSection } = useSections();
 
   // Merge demo songs with imported audio engine songs
   const allLibrarySongs: Song[] = [
@@ -342,6 +348,8 @@ export default function Index() {
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
             onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
+            sections={getSectionsForSong(currentSongId)}
+            onOpenSectionEditor={() => setShowSectionEditor(true)}
           />
         </div>
 
@@ -398,6 +406,20 @@ export default function Index() {
         <ImportMusic
           onImport={handleImportSongs}
           onClose={() => setShowImport(false)}
+        />
+      )}
+
+      {/* Section Editor Modal */}
+      {showSectionEditor && (
+        <SectionEditor
+          isOpen={showSectionEditor}
+          onClose={() => setShowSectionEditor(false)}
+          sections={getSectionsForSong(currentSongId)}
+          totalDuration={displaySong.duration}
+          onAddSection={(type, startTime) => addSection(currentSongId, type, startTime)}
+          onUpdateSection={(sectionId, updates) => updateSection(currentSongId, sectionId, updates)}
+          onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
+          onSeekToSection={handleSeek}
         />
       )}
     </div>
