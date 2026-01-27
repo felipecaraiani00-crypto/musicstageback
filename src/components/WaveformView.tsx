@@ -1,11 +1,14 @@
 import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Section } from "@/types/section";
+import { SectionMarkers } from "./SectionMarkers";
 
 interface WaveformViewProps {
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
   onSeek: (time: number) => void;
+  sections?: Section[];
 }
 
 export function WaveformView({
@@ -13,6 +16,7 @@ export function WaveformView({
   totalDuration,
   isPlaying,
   onSeek,
+  sections = [],
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,6 +125,13 @@ export function WaveformView({
           ref={canvasRef}
           className="w-full h-full"
           style={{ width: "100%", height: "100%" }}
+        />
+
+        {/* Section Markers */}
+        <SectionMarkers
+          sections={sections}
+          totalDuration={totalDuration}
+          onSeekToSection={onSeek}
         />
         
         {/* Playhead - follows music in real-time */}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { AudioWaveform, SlidersHorizontal } from "lucide-react";
+import { AudioWaveform, SlidersHorizontal, Scissors } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WaveformView } from "./WaveformView";
 import { HorizontalFaders, FaderTrack } from "./HorizontalFaders";
+import { Section } from "@/types/section";
 
 interface SongViewerProps {
   currentTime: number;
@@ -13,6 +14,8 @@ interface SongViewerProps {
   onVolumeChange: (trackId: string, volume: number) => void;
   onMuteToggle?: (trackId: string) => void;
   onSoloToggle?: (trackId: string) => void;
+  sections?: Section[];
+  onOpenSectionEditor?: () => void;
 }
 
 type ViewMode = "waveform" | "faders";
@@ -26,6 +29,8 @@ export function SongViewer({
   onVolumeChange,
   onMuteToggle,
   onSoloToggle,
+  sections = [],
+  onOpenSectionEditor,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
@@ -37,6 +42,23 @@ export function SongViewer({
         </h3>
 
         <div className="flex items-center gap-1">
+          {/* Section editor button */}
+          {onOpenSectionEditor && (
+            <button
+              onClick={onOpenSectionEditor}
+              className={cn(
+                "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
+                sections.length > 0
+                  ? "bg-primary/20 text-primary hover:bg-primary/30"
+                  : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+              )}
+              title="Editar seções"
+            >
+              <Scissors className="w-3 h-3" />
+              <span>{sections.length > 0 ? sections.length : "+"}</span>
+            </button>
+          )}
+
           {/* View toggle button */}
           <button
             onClick={() => setViewMode(viewMode === "waveform" ? "faders" : "waveform")}
@@ -60,7 +82,6 @@ export function SongViewer({
         </div>
       </div>
 
-      {/* View content */}
       <div className="flex-1 min-h-0 animate-fade-in">
         {viewMode === "waveform" ? (
           <WaveformView
@@ -68,6 +89,7 @@ export function SongViewer({
             totalDuration={totalDuration}
             isPlaying={isPlaying}
             onSeek={onSeek}
+            sections={sections}
           />
         ) : (
           <HorizontalFaders 
