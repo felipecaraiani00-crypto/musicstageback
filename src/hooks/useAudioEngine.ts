@@ -69,6 +69,17 @@ export function useAudioEngine() {
     audioEngine.resetPans();
   }, []);
 
+  // Fade instruments in/out (toggle)
+  const toggleInstrumentsFade = useCallback(() => {
+    const isFaded = audioEngine.areInstrumentsFaded();
+    audioEngine.fadeInstruments(!isFaded, 1.5);
+  }, []);
+
+  // Check if instruments are faded
+  const areInstrumentsFaded = useCallback(() => {
+    return audioEngine.areInstrumentsFaded();
+  }, []);
+
   // Set master volume (0-100)
   const setMasterVolume = useCallback((volume: number) => {
     audioEngine.setMasterVolume(volume / 100);
@@ -120,6 +131,8 @@ export function useAudioEngine() {
     handleTrackSoloToggle,
     splitClickAndInstruments,
     resetPans,
+    toggleInstrumentsFade,
+    areInstrumentsFaded,
     setMasterVolume,
     setCurrentSong,
     // Playback
