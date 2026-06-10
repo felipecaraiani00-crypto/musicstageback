@@ -85,9 +85,11 @@ export function SongList({ songs, currentSongId, onSongSelect }: SongListProps) 
                 <p className="text-[9px] font-mono text-muted-foreground leading-tight">
                   {formatDuration(song.duration)}
                 </p>
-                <p className="text-[9px] font-mono text-muted-foreground leading-tight">
-                  {song.bpm}bpm
-                </p>
+                {song.bpm ? (
+                  <p className="text-[9px] font-mono text-muted-foreground leading-tight">
+                    {song.bpm}bpm
+                  </p>
+                ) : null}
               </div>
             </button>
           );
