@@ -7,7 +7,7 @@ export interface Song {
   title: string;
   artist?: string;
   duration: number; // seconds
-  bpm: number;
+  bpm?: number;
   trackCount?: number;
 }
 
