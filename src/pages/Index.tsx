@@ -24,13 +24,13 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// All available songs in library (demo data)
+// All available songs in library (demo data) — no native BPM; BPM only for multitrack imports
 const demoSongs: Song[] = [
-  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
-  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
-  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
-  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
-  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
+  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192 },
+  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245 },
+  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330 },
+  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285 },
+  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312 },
 ];
 
 const BEATS_PER_BAR = 4;
