@@ -119,7 +119,7 @@ export default function Index() {
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
   // Get BPM from song
-  const effectiveBpm = currentSong?.bpm || 120;
+  const effectiveBpm = isImportedSong ? (currentSong?.bpm || 120) : 0;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
