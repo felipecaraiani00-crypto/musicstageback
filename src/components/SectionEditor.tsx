@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Trash2, Check } from "lucide-react";
+import { Plus, X, Trash2, Check, Repeat, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Section,
@@ -22,10 +22,15 @@ interface SectionEditorProps {
   onClose: () => void;
   sections: Section[];
   totalDuration: number;
-  onAddSection: (type: string, startTime: number) => void;
-  onUpdateSection: (sectionId: string, updates: { type?: string; startTime?: number }) => void;
+  loopSectionId: string | null;
+  onAddSection: (type: string, startTime: number, endTime: number) => void;
+  onUpdateSection: (
+    sectionId: string,
+    updates: { type?: string; startTime?: number; endTime?: number }
+  ) => void;
   onDeleteSection: (sectionId: string) => void;
   onSeekToSection: (startTime: number) => void;
+  onToggleLoop: (sectionId: string) => void;
 }
 
 export function SectionEditor({
@@ -33,46 +38,58 @@ export function SectionEditor({
   onClose,
   sections,
   totalDuration,
+  loopSectionId,
   onAddSection,
   onUpdateSection,
   onDeleteSection,
   onSeekToSection,
+  onToggleLoop,
 }: SectionEditorProps) {
   const [newType, setNewType] = useState("verse");
   const [newCustomType, setNewCustomType] = useState("");
-  const [newTime, setNewTime] = useState("00:00:000");
+  const [newStart, setNewStart] = useState("00:00:000");
+  const [newEnd, setNewEnd] = useState("00:00:000");
   const [isCustomType, setIsCustomType] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTime, setEditTime] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
 
   const handleAddSection = () => {
     const type = isCustomType && newCustomType.trim() ? newCustomType.trim() : newType;
-    const startTime = parseTimeToSeconds(newTime);
-    
-    if (startTime >= 0 && startTime <= totalDuration) {
-      onAddSection(type, startTime);
-      setNewTime("00:00:000");
+    const startTime = parseTimeToSeconds(newStart);
+    const endTime = parseTimeToSeconds(newEnd);
+
+    if (
+      startTime >= 0 &&
+      startTime <= totalDuration &&
+      endTime > startTime &&
+      endTime <= totalDuration
+    ) {
+      onAddSection(type, startTime, endTime);
+      setNewStart("00:00:000");
+      setNewEnd("00:00:000");
       setNewCustomType("");
     }
   };
 
   const handleStartEdit = (section: Section) => {
     setEditingId(section.id);
-    setEditTime(formatTimeWithMs(section.startTime));
+    setEditStart(formatTimeWithMs(section.startTime));
+    setEditEnd(formatTimeWithMs(section.endTime));
   };
 
   const handleSaveEdit = (sectionId: string) => {
-    const startTime = parseTimeToSeconds(editTime);
-    if (startTime >= 0 && startTime <= totalDuration) {
-      onUpdateSection(sectionId, { startTime });
+    const startTime = parseTimeToSeconds(editStart);
+    const endTime = parseTimeToSeconds(editEnd);
+    if (
+      startTime >= 0 &&
+      startTime <= totalDuration &&
+      endTime > startTime &&
+      endTime <= totalDuration
+    ) {
+      onUpdateSection(sectionId, { startTime, endTime });
     }
     setEditingId(null);
-  };
-
-  const handleSectionClick = (section: Section) => {
-    if (editingId !== section.id) {
-      onSeekToSection(section.startTime);
-    }
   };
 
   return (
@@ -129,25 +146,32 @@ export function SectionEditor({
             />
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <div className="flex-1">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">
-                Tempo (MM:SS:mmm)
+                Início (MM:SS:mmm)
               </label>
               <Input
-                value={newTime}
-                onChange={(e) => setNewTime(e.target.value)}
+                value={newStart}
+                onChange={(e) => setNewStart(e.target.value)}
                 placeholder="00:00:000"
                 className="h-8 text-sm font-mono"
               />
             </div>
-            <Button
-              onClick={handleAddSection}
-              size="sm"
-              className="h-8 mt-4"
-            >
+            <div className="flex-1">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">
+                Fim (MM:SS:mmm)
+              </label>
+              <Input
+                value={newEnd}
+                onChange={(e) => setNewEnd(e.target.value)}
+                placeholder="00:00:000"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+            <Button onClick={handleAddSection} size="sm" className="h-8">
               <Plus className="w-4 h-4 mr-1" />
-              Adicionar
+              Add
             </Button>
           </div>
         </div>
@@ -163,64 +187,100 @@ export function SectionEditor({
               Nenhuma seção ainda. Adicione acima!
             </p>
           ) : (
-            sections.map((section) => (
-              <div
-                key={section.id}
-                className="flex items-center gap-2 p-2 rounded bg-secondary/50 hover:bg-secondary/80 transition-colors cursor-pointer"
-                onClick={() => handleSectionClick(section)}
-              >
+            sections.map((section) => {
+              const isLooping = loopSectionId === section.id;
+              const isEditing = editingId === section.id;
+              return (
                 <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: section.color }}
-                />
-                <span className="text-sm font-medium flex-1 truncate">
-                  {getSectionLabel(section.type)}
-                </span>
-
-                {editingId === section.id ? (
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <Input
-                      value={editTime}
-                      onChange={(e) => setEditTime(e.target.value)}
-                      className="w-24 h-7 text-xs font-mono"
-                      autoFocus
+                  key={section.id}
+                  className={cn(
+                    "p-2 rounded bg-secondary/50 hover:bg-secondary/80 transition-colors",
+                    isLooping && "ring-2 ring-primary"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: section.color }}
                     />
                     <button
-                      onClick={() => handleSaveEdit(section.id)}
+                      onClick={() => onSeekToSection(section.startTime)}
+                      className="text-sm font-medium flex-1 truncate text-left hover:text-primary"
+                    >
+                      {getSectionLabel(section.type)}
+                    </button>
+
+                    <button
+                      onClick={() => onToggleLoop(section.id)}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        isLooping
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-primary/20 text-muted-foreground"
+                      )}
+                      title={isLooping ? "Parar loop" : "Repetir esta seção"}
+                    >
+                      <Repeat className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        isEditing ? handleSaveEdit(section.id) : handleStartEdit(section)
+                      }
                       className="p-1 rounded hover:bg-primary/20"
+                      title={isEditing ? "Salvar" : "Editar tempos"}
                     >
-                      <Check className="w-4 h-4 text-primary" />
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="p-1 rounded hover:bg-destructive/20"
-                    >
-                      <X className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleStartEdit(section)}
-                      className="text-xs font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted"
-                    >
-                      {formatTimeWithMs(section.startTime)}
+                      {isEditing ? (
+                        <Check className="w-3.5 h-3.5 text-primary" />
+                      ) : (
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
                     </button>
                     <button
                       onClick={() => onDeleteSection(section.id)}
                       className="p-1 rounded hover:bg-destructive/20"
+                      title="Excluir"
                     >
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </button>
                   </div>
-                )}
-              </div>
-            ))
+
+                  {isEditing ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input
+                        value={editStart}
+                        onChange={(e) => setEditStart(e.target.value)}
+                        className="h-7 text-xs font-mono"
+                        placeholder="Início"
+                      />
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <Input
+                        value={editEnd}
+                        onChange={(e) => setEditEnd(e.target.value)}
+                        className="h-7 text-xs font-mono"
+                        placeholder="Fim"
+                      />
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="p-1 rounded hover:bg-destructive/20"
+                      >
+                        <X className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-muted-foreground">
+                      <span>{formatTimeWithMs(section.startTime)}</span>
+                      <span>→</span>
+                      <span>{formatTimeWithMs(section.endTime)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 
         <div className="text-[10px] text-muted-foreground text-center">
-          Clique em uma seção para ir até ela
+          Clique no nome para ir até a seção · 🔁 repete · ✏️ edita · 🗑️ exclui
         </div>
       </DialogContent>
     </Dialog>
