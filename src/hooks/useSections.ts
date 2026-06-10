@@ -12,12 +12,13 @@ export function useSections() {
   );
 
   const addSection = useCallback(
-    (songId: string, type: string, startTime: number) => {
+    (songId: string, type: string, startTime: number, endTime: number) => {
       const newSection: Section = {
         id: `section-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         songId,
         type,
         startTime,
+        endTime: Math.max(endTime, startTime + 0.001),
         color: getSectionColor(type),
       };
 
@@ -34,7 +35,11 @@ export function useSections() {
   );
 
   const updateSection = useCallback(
-    (songId: string, sectionId: string, updates: Partial<Pick<Section, "type" | "startTime">>) => {
+    (
+      songId: string,
+      sectionId: string,
+      updates: Partial<Pick<Section, "type" | "startTime" | "endTime">>
+    ) => {
       setSections((prev) => {
         const songSections = prev[songId] || [];
         const updatedSections = songSections

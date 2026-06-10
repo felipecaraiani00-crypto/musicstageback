@@ -24,13 +24,13 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// All available songs in library (demo data)
+// All available songs in library (demo data) — no native BPM; BPM only for multitrack imports
 const demoSongs: Song[] = [
-  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192, bpm: 120 },
-  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245, bpm: 78 },
-  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330, bpm: 73 },
-  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285, bpm: 68 },
-  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312, bpm: 76 },
+  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192 },
+  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245 },
+  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330 },
+  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285 },
+  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312 },
 ];
 
 const BEATS_PER_BAR = 4;
@@ -119,7 +119,7 @@ export default function Index() {
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
   // Get BPM from song
-  const effectiveBpm = currentSong?.bpm || 120;
+  const effectiveBpm = isImportedSong ? (currentSong?.bpm || 120) : 0;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
@@ -149,7 +149,7 @@ export default function Index() {
   }, [clickVolume]);
 
   useEffect(() => {
-    if (isPlaying && isClickActive) {
+    if (isPlaying && isClickActive && isImportedSong && effectiveBpm > 0) {
       metronome.start(effectiveBpm, (beat) => {
         setCurrentBeat(beat);
       });
@@ -163,7 +163,33 @@ export default function Index() {
     return () => {
       metronome.stop();
     };
-  }, [isPlaying, isClickActive, effectiveBpm]);
+  }, [isPlaying, isClickActive, effectiveBpm, isImportedSong]);
+
+  // ===== Section loop state =====
+  const [loopSectionId, setLoopSectionId] = useState<string | null>(null);
+  const currentSections = getSectionsForSong(currentSongId);
+  const activeLoopSection = currentSections.find((s) => s.id === loopSectionId) || null;
+
+  const handleToggleLoop = useCallback((sectionId: string) => {
+    setLoopSectionId((prev) => (prev === sectionId ? null : sectionId));
+  }, []);
+
+  // Clear loop when changing song
+  useEffect(() => {
+    setLoopSectionId(null);
+  }, [currentSongId]);
+
+  // Loop enforcement: when currentTime passes endTime, seek back to startTime
+  useEffect(() => {
+    if (!activeLoopSection || !isPlaying) return;
+    if (currentTime >= activeLoopSection.endTime) {
+      if (isImportedSong) {
+        engineSeek(activeLoopSection.startTime);
+      } else {
+        setDemoCurrentTime(activeLoopSection.startTime);
+      }
+    }
+  }, [currentTime, activeLoopSection, isPlaying, isImportedSong, engineSeek]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
@@ -348,8 +374,11 @@ export default function Index() {
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
             onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
-            sections={getSectionsForSong(currentSongId)}
+            sections={currentSections}
             onOpenSectionEditor={() => setShowSectionEditor(true)}
+            loopSectionId={loopSectionId}
+            onToggleLoop={handleToggleLoop}
+            onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
           />
         </div>
 
@@ -380,6 +409,7 @@ export default function Index() {
           showSplitControl={isImportedSong}
           instrumentsFaded={instrumentsFaded}
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
+          showMetronome={isImportedSong}
         />
 
         <TransportControls
@@ -414,12 +444,14 @@ export default function Index() {
         <SectionEditor
           isOpen={showSectionEditor}
           onClose={() => setShowSectionEditor(false)}
-          sections={getSectionsForSong(currentSongId)}
+          sections={currentSections}
           totalDuration={displaySong.duration}
-          onAddSection={(type, startTime) => addSection(currentSongId, type, startTime)}
+          loopSectionId={loopSectionId}
+          onAddSection={(type, startTime, endTime) => addSection(currentSongId, type, startTime, endTime)}
           onUpdateSection={(sectionId, updates) => updateSection(currentSongId, sectionId, updates)}
           onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
           onSeekToSection={handleSeek}
+          onToggleLoop={handleToggleLoop}
         />
       )}
     </div>

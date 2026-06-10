@@ -16,6 +16,9 @@ interface SongViewerProps {
   onSoloToggle?: (trackId: string) => void;
   sections?: Section[];
   onOpenSectionEditor?: () => void;
+  loopSectionId?: string | null;
+  onToggleLoop?: (sectionId: string) => void;
+  onDeleteSection?: (sectionId: string) => void;
 }
 
 type ViewMode = "waveform" | "faders";
@@ -31,6 +34,9 @@ export function SongViewer({
   onSoloToggle,
   sections = [],
   onOpenSectionEditor,
+  loopSectionId,
+  onToggleLoop,
+  onDeleteSection,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
@@ -90,6 +96,9 @@ export function SongViewer({
             isPlaying={isPlaying}
             onSeek={onSeek}
             sections={sections}
+            loopSectionId={loopSectionId}
+            onToggleLoop={onToggleLoop}
+            onDeleteSection={onDeleteSection}
           />
         ) : (
           <HorizontalFaders 
