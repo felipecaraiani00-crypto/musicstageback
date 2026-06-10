@@ -149,7 +149,7 @@ export default function Index() {
   }, [clickVolume]);
 
   useEffect(() => {
-    if (isPlaying && isClickActive) {
+    if (isPlaying && isClickActive && isImportedSong && effectiveBpm > 0) {
       metronome.start(effectiveBpm, (beat) => {
         setCurrentBeat(beat);
       });
@@ -163,7 +163,33 @@ export default function Index() {
     return () => {
       metronome.stop();
     };
-  }, [isPlaying, isClickActive, effectiveBpm]);
+  }, [isPlaying, isClickActive, effectiveBpm, isImportedSong]);
+
+  // ===== Section loop state =====
+  const [loopSectionId, setLoopSectionId] = useState<string | null>(null);
+  const currentSections = getSectionsForSong(currentSongId);
+  const activeLoopSection = currentSections.find((s) => s.id === loopSectionId) || null;
+
+  const handleToggleLoop = useCallback((sectionId: string) => {
+    setLoopSectionId((prev) => (prev === sectionId ? null : sectionId));
+  }, []);
+
+  // Clear loop when changing song
+  useEffect(() => {
+    setLoopSectionId(null);
+  }, [currentSongId]);
+
+  // Loop enforcement: when currentTime passes endTime, seek back to startTime
+  useEffect(() => {
+    if (!activeLoopSection || !isPlaying) return;
+    if (currentTime >= activeLoopSection.endTime) {
+      if (isImportedSong) {
+        engineSeek(activeLoopSection.startTime);
+      } else {
+        setDemoCurrentTime(activeLoopSection.startTime);
+      }
+    }
+  }, [currentTime, activeLoopSection, isPlaying, isImportedSong, engineSeek]);
 
   const handlePlayPause = useCallback(() => {
     if (isImportedSong) {
