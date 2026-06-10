@@ -9,6 +9,9 @@ interface WaveformViewProps {
   isPlaying: boolean;
   onSeek: (time: number) => void;
   sections?: Section[];
+  loopSectionId?: string | null;
+  onToggleLoop?: (sectionId: string) => void;
+  onDeleteSection?: (sectionId: string) => void;
 }
 
 export function WaveformView({
@@ -17,6 +20,9 @@ export function WaveformView({
   isPlaying,
   onSeek,
   sections = [],
+  loopSectionId,
+  onToggleLoop,
+  onDeleteSection,
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -132,6 +138,9 @@ export function WaveformView({
           sections={sections}
           totalDuration={totalDuration}
           onSeekToSection={onSeek}
+          loopSectionId={loopSectionId}
+          onToggleLoop={onToggleLoop}
+          onDeleteSection={onDeleteSection}
         />
         
         {/* Playhead - follows music in real-time */}
