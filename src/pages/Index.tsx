@@ -374,8 +374,11 @@ export default function Index() {
             onVolumeChange={handleVolumeChange}
             onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
             onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
-            sections={getSectionsForSong(currentSongId)}
+            sections={currentSections}
             onOpenSectionEditor={() => setShowSectionEditor(true)}
+            loopSectionId={loopSectionId}
+            onToggleLoop={handleToggleLoop}
+            onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
           />
         </div>
 
@@ -406,6 +409,7 @@ export default function Index() {
           showSplitControl={isImportedSong}
           instrumentsFaded={instrumentsFaded}
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
+          showMetronome={isImportedSong}
         />
 
         <TransportControls
@@ -440,12 +444,14 @@ export default function Index() {
         <SectionEditor
           isOpen={showSectionEditor}
           onClose={() => setShowSectionEditor(false)}
-          sections={getSectionsForSong(currentSongId)}
+          sections={currentSections}
           totalDuration={displaySong.duration}
-          onAddSection={(type, startTime) => addSection(currentSongId, type, startTime)}
+          loopSectionId={loopSectionId}
+          onAddSection={(type, startTime, endTime) => addSection(currentSongId, type, startTime, endTime)}
           onUpdateSection={(sectionId, updates) => updateSection(currentSongId, sectionId, updates)}
           onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
           onSeekToSection={handleSeek}
+          onToggleLoop={handleToggleLoop}
         />
       )}
     </div>
