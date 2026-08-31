@@ -391,13 +391,28 @@ export default function Index() {
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
         />
 
-        <TransportControls
-          isPlaying={isPlaying}
-          onPlayPause={handlePlayPause}
-          onStop={handleStop}
-          onPrev={handlePrev}
-          onNext={handleNext}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleFooterLoopToggle}
+            className={cn(
+              "transport-btn min-w-[40px] min-h-[40px]",
+              loopSectionId
+                ? "text-primary bg-primary/20 ring-1 ring-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title={loopSectionId ? "Desativar loop" : "Repetir seção atual"}
+          >
+            <Repeat className="w-4 h-4" />
+          </button>
+
+          <TransportControls
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onStop={handleStop}
+            onPrev={handlePrev}
+            onNext={handleNext}
+          />
+        </div>
       </footer>
 
       {/* Library Modal */}
