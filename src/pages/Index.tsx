@@ -182,7 +182,6 @@ export default function Index() {
       setDemoIsPlaying(false);
       setDemoCurrentTime(0);
     }
-    setCurrentBeat(1);
   }, [isImportedSong, engineStop]);
 
   const handlePrev = useCallback(() => {
@@ -257,7 +256,7 @@ export default function Index() {
   }, [toggleInstrumentsFade]);
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
-    setCurrentBeat(1);
+    
     
     // Stop current playback
     if (audioEngineSongs.some(s => s.id === currentSongId)) {
