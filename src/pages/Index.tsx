@@ -13,7 +13,7 @@ import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useSections } from "@/hooks/useSections";
 import { Song as AudioSong } from "@/lib/audioEngine";
-import { metronome } from "@/lib/metronome";
+
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
@@ -33,7 +33,7 @@ const demoSongs: Song[] = [
   { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312 },
 ];
 
-const BEATS_PER_BAR = 4;
+
 
 // Convert AudioEngine Song to UI Song format
 function audioSongToUISong(audioSong: AudioSong): Song {
@@ -49,9 +49,7 @@ function audioSongToUISong(audioSong: AudioSong): Song {
 export default function Index() {
   const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
-  const [clickVolume, setClickVolume] = useState(75);
-  const [isClickActive, setIsClickActive] = useState(true);
-  const [currentBeat, setCurrentBeat] = useState(1);
+  
   
   
   // Demo playback state (for songs without audio)
@@ -118,8 +116,6 @@ export default function Index() {
   const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
-  // Get BPM from song
-  const effectiveBpm = isImportedSong ? (currentSong?.bpm || 120) : 0;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
@@ -142,28 +138,6 @@ export default function Index() {
 
     return () => clearInterval(interval);
   }, [demoIsPlaying, currentSong, isImportedSong]);
-
-  // Metronome control
-  useEffect(() => {
-    metronome.setVolume(clickVolume / 100);
-  }, [clickVolume]);
-
-  useEffect(() => {
-    if (isPlaying && isClickActive && isImportedSong && effectiveBpm > 0) {
-      metronome.start(effectiveBpm, (beat) => {
-        setCurrentBeat(beat);
-      });
-    } else {
-      metronome.stop();
-      if (!isPlaying) {
-        setCurrentBeat(1);
-      }
-    }
-
-    return () => {
-      metronome.stop();
-    };
-  }, [isPlaying, isClickActive, effectiveBpm, isImportedSong]);
 
   // ===== Section loop state =====
   const [loopSectionId, setLoopSectionId] = useState<string | null>(null);
@@ -206,7 +180,6 @@ export default function Index() {
       setDemoIsPlaying(false);
       setDemoCurrentTime(0);
     }
-    setCurrentBeat(1);
   }, [isImportedSong, engineStop]);
 
   const handlePrev = useCallback(() => {
@@ -281,7 +254,7 @@ export default function Index() {
   }, [toggleInstrumentsFade]);
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
-    setCurrentBeat(1);
+    
     
     // Stop current playback
     if (audioEngineSongs.some(s => s.id === currentSongId)) {
@@ -396,20 +369,12 @@ export default function Index() {
       <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-1 flex items-center justify-between gap-4">
         <MasterControls
           masterVolume={masterVolume}
-          clickVolume={clickVolume}
-          bpm={effectiveBpm}
-          isClickActive={isClickActive}
-          currentBeat={currentBeat}
-          beatsPerBar={BEATS_PER_BAR}
           onMasterVolumeChange={setMasterVolume}
-          onClickVolumeChange={setClickVolume}
-          onClickToggle={() => setIsClickActive((prev) => !prev)}
           splitMode={splitMode}
           onSplitModeChange={handleSplitModeChange}
           showSplitControl={isImportedSong}
           instrumentsFaded={instrumentsFaded}
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
-          showMetronome={isImportedSong}
         />
 
         <TransportControls
