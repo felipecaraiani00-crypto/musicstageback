@@ -49,9 +49,7 @@ function audioSongToUISong(audioSong: AudioSong): Song {
 export default function Index() {
   const [tracks, setTracks] = useState<FaderTrack[]>(initialTracks);
   const [masterVolume, setMasterVolume] = useState(80);
-  const [clickVolume, setClickVolume] = useState(75);
-  const [isClickActive, setIsClickActive] = useState(true);
-  const [currentBeat, setCurrentBeat] = useState(1);
+  
   
   
   // Demo playback state (for songs without audio)
