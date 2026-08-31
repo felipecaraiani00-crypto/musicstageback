@@ -139,7 +139,6 @@ export function WaveformView({
           totalDuration={totalDuration}
           onSeekToSection={onSeek}
           loopSectionId={loopSectionId}
-          onToggleLoop={onToggleLoop}
           onDeleteSection={onDeleteSection}
         />
         
