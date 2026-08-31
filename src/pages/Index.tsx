@@ -141,28 +141,6 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [demoIsPlaying, currentSong, isImportedSong]);
 
-  // Metronome control
-  useEffect(() => {
-    metronome.setVolume(clickVolume / 100);
-  }, [clickVolume]);
-
-  useEffect(() => {
-    if (isPlaying && isClickActive && isImportedSong && effectiveBpm > 0) {
-      metronome.start(effectiveBpm, (beat) => {
-        setCurrentBeat(beat);
-      });
-    } else {
-      metronome.stop();
-      if (!isPlaying) {
-        setCurrentBeat(1);
-      }
-    }
-
-    return () => {
-      metronome.stop();
-    };
-  }, [isPlaying, isClickActive, effectiveBpm, isImportedSong]);
-
   // ===== Section loop state =====
   const [loopSectionId, setLoopSectionId] = useState<string | null>(null);
   const currentSections = getSectionsForSong(currentSongId);
