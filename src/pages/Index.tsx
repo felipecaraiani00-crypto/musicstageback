@@ -13,7 +13,7 @@ import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useSections } from "@/hooks/useSections";
 import { Song as AudioSong } from "@/lib/audioEngine";
-import { metronome } from "@/lib/metronome";
+
 
 const initialTracks: FaderTrack[] = [
   { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
