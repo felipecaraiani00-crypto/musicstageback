@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Music, List } from "lucide-react";
+import { Settings, Music, List, Repeat } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
@@ -147,6 +148,19 @@ export default function Index() {
   const handleToggleLoop = useCallback((sectionId: string) => {
     setLoopSectionId((prev) => (prev === sectionId ? null : sectionId));
   }, []);
+
+  const handleFooterLoopToggle = useCallback(() => {
+    if (loopSectionId) {
+      setLoopSectionId(null);
+    } else {
+      const section = currentSections.find(
+        (s) => currentTime >= s.startTime && currentTime < s.endTime
+      );
+      if (section) {
+        setLoopSectionId(section.id);
+      }
+    }
+  }, [loopSectionId, currentSections, currentTime]);
 
   // Clear loop when changing song
   useEffect(() => {
@@ -377,13 +391,28 @@ export default function Index() {
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
         />
 
-        <TransportControls
-          isPlaying={isPlaying}
-          onPlayPause={handlePlayPause}
-          onStop={handleStop}
-          onPrev={handlePrev}
-          onNext={handleNext}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleFooterLoopToggle}
+            className={cn(
+              "transport-btn min-w-[40px] min-h-[40px]",
+              loopSectionId
+                ? "text-primary bg-primary/20 ring-1 ring-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title={loopSectionId ? "Desativar loop" : "Repetir seção atual"}
+          >
+            <Repeat className="w-4 h-4" />
+          </button>
+
+          <TransportControls
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onStop={handleStop}
+            onPrev={handlePrev}
+            onNext={handleNext}
+          />
+        </div>
       </footer>
 
       {/* Library Modal */}
