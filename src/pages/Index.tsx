@@ -33,7 +33,7 @@ const demoSongs: Song[] = [
   { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312 },
 ];
 
-const BEATS_PER_BAR = 4;
+
 
 // Convert AudioEngine Song to UI Song format
 function audioSongToUISong(audioSong: AudioSong): Song {
@@ -116,8 +116,6 @@ export default function Index() {
   const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
-  // Get BPM from song
-  const effectiveBpm = isImportedSong ? (currentSong?.bpm || 120) : 0;
   
   // Use audio engine tracks if available, otherwise use demo tracks
   const activeTracks = isImportedSong && currentFaderTracks.length > 0 
