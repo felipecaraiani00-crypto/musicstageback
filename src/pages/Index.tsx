@@ -149,6 +149,19 @@ export default function Index() {
     setLoopSectionId((prev) => (prev === sectionId ? null : sectionId));
   }, []);
 
+  const handleFooterLoopToggle = useCallback(() => {
+    if (loopSectionId) {
+      setLoopSectionId(null);
+    } else {
+      const section = currentSections.find(
+        (s) => currentTime >= s.startTime && currentTime < s.endTime
+      );
+      if (section) {
+        setLoopSectionId(section.id);
+      }
+    }
+  }, [loopSectionId, currentSections, currentTime]);
+
   // Clear loop when changing song
   useEffect(() => {
     setLoopSectionId(null);
