@@ -70,9 +70,9 @@ export function useAudioEngine() {
   }, []);
 
   // Fade instruments in/out (toggle)
-  const toggleInstrumentsFade = useCallback(() => {
+  const toggleInstrumentsFade = useCallback((duration: number = 4.5) => {
     const isFaded = audioEngine.areInstrumentsFaded();
-    audioEngine.fadeInstruments(!isFaded, 1.5);
+    audioEngine.fadeInstruments(!isFaded, duration);
   }, []);
 
   // Check if instruments are faded
@@ -133,6 +133,7 @@ export function useAudioEngine() {
     resetPans,
     toggleInstrumentsFade,
     areInstrumentsFaded,
+    instrumentsFaded: state.instrumentsFaded ?? false,
     setMasterVolume,
     setCurrentSong,
     // Playback

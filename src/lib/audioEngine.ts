@@ -28,6 +28,7 @@ export interface AudioEngineState {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  instrumentsFaded: boolean;
 }
 
 type PlaybackListener = (state: { isPlaying: boolean; currentTime: number; duration: number }) => void;
@@ -466,8 +467,16 @@ class AudioEngine {
     this.notifyListeners();
   }
 
-  // Fade instruments out (leave only click), or fade them back in
-  fadeInstruments(fadeOut: boolean, duration: number = 1.5): void {
+  // Check if a track is a click, metronome or guide track
+  isClickOrGuideTrack(track: Track): boolean {
+    if (track.isClickTrack) return true;
+    const lowerName = (track.trackName || '').toLowerCase();
+    const clickKeywords = ['click', 'guide', 'metronome', 'metro', 'count', 'cue', 'guia', 'voz guia'];
+    return clickKeywords.some(keyword => lowerName.includes(keyword));
+  }
+
+  // Fade instruments out (leave only click/guide), or fade them back in
+  fadeInstruments(fadeOut: boolean, duration: number = 4.5): void {
     const song = this.getCurrentSong();
     if (!song) return;
     
@@ -477,26 +486,29 @@ class AudioEngine {
     const currentTime = context.currentTime;
     
     song.tracks.forEach(track => {
-      // Skip click tracks - they stay audible
-      if (track.isClickTrack) return;
+      // Skip click / metronome / guide tracks - they stay completely audible at full current volume
+      if (this.isClickOrGuideTrack(track)) return;
       
       if (!track.gainNode) return;
       
       if (fadeOut) {
         // Save current volume before fading out
-        this.savedInstrumentVolumes.set(track.trackId, track.volume);
+        if (!this.instrumentsFaded) {
+          this.savedInstrumentVolumes.set(track.trackId, track.volume);
+        }
         
-        // Cancel any ongoing ramps and fade to near zero
+        // Cancel any ongoing ramps and fade to 0 over duration (4 a 5s)
         track.gainNode.gain.cancelScheduledValues(currentTime);
         track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, currentTime);
-        track.gainNode.gain.linearRampToValueAtTime(0.001, currentTime + duration);
+        track.gainNode.gain.linearRampToValueAtTime(0.0001, currentTime + duration);
+        track.gainNode.gain.setValueAtTime(0, currentTime + duration);
       } else {
-        // Fade back in to saved volume
+        // Fade back in to saved volume over 1.0s
         const savedVolume = this.savedInstrumentVolumes.get(track.trackId) ?? track.volume;
         
         track.gainNode.gain.cancelScheduledValues(currentTime);
         track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, currentTime);
-        track.gainNode.gain.linearRampToValueAtTime(savedVolume, currentTime + duration);
+        track.gainNode.gain.linearRampToValueAtTime(savedVolume, currentTime + 1.0);
       }
     });
     
@@ -559,6 +571,7 @@ class AudioEngine {
       isPlaying: this.isPlaying,
       currentTime: this.getCurrentTime(),
       duration: song?.duration || 0,
+      instrumentsFaded: this.instrumentsFaded,
     };
     this.listeners.forEach(listener => listener(state));
   }
@@ -572,6 +585,7 @@ class AudioEngine {
       isPlaying: this.isPlaying,
       currentTime: this.getCurrentTime(),
       duration: song?.duration || 0,
+      instrumentsFaded: this.instrumentsFaded,
     };
   }
 }

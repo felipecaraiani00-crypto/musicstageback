@@ -17,7 +17,7 @@ import { Song as AudioSong } from "@/lib/audioEngine";
 
 
 const initialTracks: FaderTrack[] = [
-  { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80 },
+  { id: "1", name: "Click", icon: "🥁", color: "hsl(38, 95%, 55%)", volume: 80, isClickTrack: true },
   { id: "2", name: "Drums", icon: "🪘", color: "hsl(0, 72%, 55%)", volume: 85 },
   { id: "3", name: "Bass", icon: "🎸", color: "hsl(280, 70%, 55%)", volume: 75 },
   { id: "4", name: "Keys", icon: "🎹", color: "hsl(200, 70%, 45%)", volume: 70 },
@@ -69,6 +69,7 @@ export default function Index() {
     resetPans,
     toggleInstrumentsFade,
     areInstrumentsFaded,
+    instrumentsFaded: engineInstrumentsFaded,
     setMasterVolume: setEngineMasterVolume,
     setCurrentSong: setEngineCurrentSong,
     // Playback controls from audio engine
@@ -261,14 +262,21 @@ export default function Index() {
     }
   }, [splitClickAndInstruments, resetPans]);
 
-  // Handle instrument fade toggle
+  // Current fade out state (from engine for imported songs, local state for demo)
+  const isFadingOut = isImportedSong ? engineInstrumentsFaded : instrumentsFaded;
+
+  // Handle instrument fade toggle (4.5s gradual fade-out, keeping click/guide)
   const handleInstrumentsFadeToggle = useCallback(() => {
-    toggleInstrumentsFade();
-    setInstrumentsFaded(prev => !prev);
-  }, [toggleInstrumentsFade]);
+    if (isImportedSong) {
+      toggleInstrumentsFade();
+    } else {
+      setInstrumentsFaded(prev => !prev);
+    }
+  }, [isImportedSong, toggleInstrumentsFade]);
+
   const handleSongSelect = useCallback((song: Song) => {
     setCurrentSongId(song.id);
-    
+    setInstrumentsFaded(false);
     
     // Stop current playback
     if (audioEngineSongs.some(s => s.id === currentSongId)) {
@@ -387,7 +395,7 @@ export default function Index() {
           splitMode={splitMode}
           onSplitModeChange={handleSplitModeChange}
           showSplitControl={isImportedSong}
-          instrumentsFaded={instrumentsFaded}
+          instrumentsFaded={isFadingOut}
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
         />
 
@@ -411,6 +419,8 @@ export default function Index() {
             onStop={handleStop}
             onPrev={handlePrev}
             onNext={handleNext}
+            isFadingOut={isFadingOut}
+            onToggleFadeOut={handleInstrumentsFadeToggle}
           />
         </div>
       </footer>
@@ -440,6 +450,7 @@ export default function Index() {
           onClose={() => setShowSectionEditor(false)}
           sections={currentSections}
           totalDuration={displaySong.duration}
+          currentTime={currentTime}
           loopSectionId={loopSectionId}
           onAddSection={(type, startTime, endTime) => addSection(currentSongId, type, startTime, endTime)}
           onUpdateSection={(sectionId, updates) => updateSection(currentSongId, sectionId, updates)}

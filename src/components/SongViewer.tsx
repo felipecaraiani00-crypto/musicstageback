@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { AudioWaveform, SlidersHorizontal, Scissors } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { AudioWaveform, SlidersHorizontal, Scissors, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WaveformView } from "./WaveformView";
 import { HorizontalFaders, FaderTrack } from "./HorizontalFaders";
-import { Section } from "@/types/section";
+import { Section, getSectionLabel } from "@/types/section";
 
 interface SongViewerProps {
   currentTime: number;
@@ -39,9 +39,23 @@ export function SongViewer({
   onDeleteSection,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
+  const sectionRowRef = useRef<HTMLDivElement>(null);
+  const activeSectionRef = useRef<HTMLButtonElement>(null);
+
+  // Auto-scroll active section button into view when playing
+  useEffect(() => {
+    if (activeSectionRef.current && isPlaying) {
+      activeSectionRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [currentTime, isPlaying]);
 
   return (
     <div className="glass-panel p-2 h-full flex flex-col">
+      {/* Top bar */}
       <div className="flex items-center justify-between mb-1 gap-2">
         <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
           {viewMode === "waveform" ? "Waveform" : "Faders"}
@@ -87,6 +101,57 @@ export function SongViewer({
           </button>
         </div>
       </div>
+
+      {/* Sections Row / Barra de Seções */}
+      {sections.length > 0 ? (
+        <div
+          ref={sectionRowRef}
+          className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-1 mb-1.5 px-0.5 min-h-[36px]"
+        >
+          {sections.map((section) => {
+            const isActive = currentTime >= section.startTime && currentTime < section.endTime;
+            const isLooping = loopSectionId === section.id;
+            return (
+              <button
+                key={section.id}
+                ref={isActive ? activeSectionRef : null}
+                onClick={() => onSeek(section.startTime)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1.5 whitespace-nowrap shadow-sm select-none flex-shrink-0",
+                  isActive
+                    ? "ring-2 ring-white scale-105 shadow-[0_0_14px_rgba(255,255,255,0.7)] brightness-125 font-bold z-10"
+                    : "opacity-80 hover:opacity-100 hover:scale-102",
+                  isLooping && "ring-2 ring-primary"
+                )}
+                style={{
+                  backgroundColor: section.color,
+                  color: "#ffffff",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+                }}
+                title={`Ir para ${getSectionLabel(section.type)} (${Math.floor(section.startTime / 60)}:${Math.floor(section.startTime % 60).toString().padStart(2, '0')})`}
+              >
+                <span>{getSectionLabel(section.type)}</span>
+                {isActive && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between px-2.5 py-1 mb-1.5 rounded-md bg-secondary/30 border border-border/40 text-[11px] text-muted-foreground min-h-[32px]">
+          <span>Nenhuma seção cadastrada</span>
+          {onOpenSectionEditor && (
+            <button
+              onClick={onOpenSectionEditor}
+              className="text-primary hover:underline font-medium text-[11px] flex items-center gap-1 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Adicionar Seção</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 animate-fade-in">
         {viewMode === "waveform" ? (
