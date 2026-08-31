@@ -6,7 +6,6 @@ interface SectionMarkersProps {
   totalDuration: number;
   onSeekToSection: (startTime: number) => void;
   loopSectionId?: string | null;
-  onToggleLoop?: (sectionId: string) => void;
   onDeleteSection?: (sectionId: string) => void;
 }
 
@@ -15,7 +14,6 @@ export function SectionMarkers({
   totalDuration,
   onSeekToSection,
   loopSectionId,
-  onToggleLoop,
   onDeleteSection,
 }: SectionMarkersProps) {
   if (sections.length === 0 || totalDuration <= 0) return null;
