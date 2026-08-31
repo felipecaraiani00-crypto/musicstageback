@@ -59,7 +59,7 @@ export function SectionMarkers({
               style={{ backgroundColor: section.color }}
             />
 
-            {/* Label badge with quick actions */}
+            {/* Label badge */}
             <div
               className={cn(
                 "absolute top-0 left-0.5 flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-bold uppercase whitespace-nowrap shadow-md",
@@ -69,21 +69,6 @@ export function SectionMarkers({
               style={{ backgroundColor: section.color, color: "white" }}
             >
               <span>{getSectionLabel(section.type)}</span>
-              {onToggleLoop && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleLoop(section.id);
-                  }}
-                  className={cn(
-                    "ml-0.5 px-1 rounded leading-none",
-                    isLooping ? "bg-white/30" : "hover:bg-white/20"
-                  )}
-                  title={isLooping ? "Parar loop" : "Repetir"}
-                >
-                  🔁
-                </button>
-              )}
               {onDeleteSection && (
                 <button
                   onClick={(e) => {
