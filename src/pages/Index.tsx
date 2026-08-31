@@ -372,20 +372,12 @@ export default function Index() {
       <footer className="border-t border-border bg-card/80 backdrop-blur-sm px-3 py-1 flex items-center justify-between gap-4">
         <MasterControls
           masterVolume={masterVolume}
-          clickVolume={clickVolume}
-          bpm={effectiveBpm}
-          isClickActive={isClickActive}
-          currentBeat={currentBeat}
-          beatsPerBar={BEATS_PER_BAR}
           onMasterVolumeChange={setMasterVolume}
-          onClickVolumeChange={setClickVolume}
-          onClickToggle={() => setIsClickActive((prev) => !prev)}
           splitMode={splitMode}
           onSplitModeChange={handleSplitModeChange}
           showSplitControl={isImportedSong}
           instrumentsFaded={instrumentsFaded}
           onInstrumentsFadeToggle={handleInstrumentsFadeToggle}
-          showMetronome={isImportedSong}
         />
 
         <TransportControls
