@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Music, List } from "lucide-react";
+import { Settings, Music, List, Repeat } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
