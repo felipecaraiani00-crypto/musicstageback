@@ -3,6 +3,7 @@ import { Menu, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
+import { TransitionMode } from "@/components/SectionMarkers";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
 import { SongList, Song } from "@/components/SongList";
@@ -163,21 +164,24 @@ export default function Index() {
     setLoopSectionId(null);
   }, [currentSongId]);
 
-  // ===== Agendamento de Pulo no Fim da Seção (End of Section) =====
+  // ===== Agendamento de Pulo: Fim da Seção (End of Section) ou Próximo Compasso (Next Bar) =====
   const [pendingSectionId, setPendingSectionId] = useState<string | null>(null);
-  const scheduledFromEndTimeRef = useRef<number | null>(null);
+  const [pendingMode, setPendingMode] = useState<TransitionMode | null>(null);
+  const scheduledTriggerTimeRef = useRef<number | null>(null);
 
   // Limpar agendamento se o áudio pausar ou se trocar de música
   useEffect(() => {
     if (!isPlaying) {
       setPendingSectionId(null);
-      scheduledFromEndTimeRef.current = null;
+      setPendingMode(null);
+      scheduledTriggerTimeRef.current = null;
     }
   }, [isPlaying]);
 
   useEffect(() => {
     setPendingSectionId(null);
-    scheduledFromEndTimeRef.current = null;
+    setPendingMode(null);
+    scheduledTriggerTimeRef.current = null;
   }, [currentSongId]);
 
   // Loop enforcement: when currentTime passes endTime, seek back to startTime (se não houver transição agendada)
@@ -237,67 +241,87 @@ export default function Index() {
     }
   }, [isImportedSong, engineSeek]);
 
-  // CLIQUE EM OUTRA SEÇÃO DURANTE O PLAYBACK:
-  // Se o áudio estiver tocando e o usuário clicar no bloco de uma seção diferente da atual,
-  // não pula de imediato; guarda como destino agendado (pendingSectionId).
+  // TRANSIÇÃO QUANTIZADA:
+  // - Modo 'end_of_section' (clique simples): aguarda até o fim da seção atual (endTime)
+  // - Modo 'next_bar' (duplo clique): salta no próximo compasso mais próximo (4/4) baseado no BPM da música
   const handleSectionSelect = useCallback(
-    (sectionId: string, sectionStartTime: number) => {
+    (sectionId: string, sectionStartTime: number, mode: TransitionMode = "end_of_section") => {
       if (!isPlaying) {
         setPendingSectionId(null);
-        scheduledFromEndTimeRef.current = null;
+        setPendingMode(null);
+        scheduledTriggerTimeRef.current = null;
         handleSeek(sectionStartTime);
         return;
       }
 
-      // Identifica a seção que está tocando no momento
+      // Se for duplo clique (Next Bar - pulo rápido no próximo compasso):
+      if (mode === "next_bar") {
+        const songBpm = currentSong?.bpm && currentSong.bpm > 0 ? currentSong.bpm : 120;
+        const barDuration = (60 / songBpm) * 4;
+        let nextBarTime = Math.ceil(currentTime / barDuration) * barDuration;
+        // Margem mínima de 120ms para o próximo compasso
+        if (nextBarTime - currentTime < 0.12) {
+          nextBarTime += barDuration;
+        }
+
+        setPendingSectionId(sectionId);
+        setPendingMode("next_bar");
+        scheduledTriggerTimeRef.current = nextBarTime;
+        return;
+      }
+
+      // Se for clique simples (End of Section - agendamento no final da seção):
       const currentActiveSection = currentSections.find(
         (s) => currentTime >= s.startTime && currentTime < s.endTime
       );
 
       if (currentActiveSection && currentActiveSection.id !== sectionId) {
-        // Se clicar novamente na seção já agendada, cancela o agendamento
-        if (pendingSectionId === sectionId) {
+        // Se clicar novamente na seção já agendada em end_of_section, cancela
+        if (pendingSectionId === sectionId && pendingMode === "end_of_section") {
           setPendingSectionId(null);
-          scheduledFromEndTimeRef.current = null;
+          setPendingMode(null);
+          scheduledTriggerTimeRef.current = null;
         } else {
           // Agenda o pulo para o final da seção atual
           setPendingSectionId(sectionId);
-          scheduledFromEndTimeRef.current = currentActiveSection.endTime;
+          setPendingMode("end_of_section");
+          scheduledTriggerTimeRef.current = currentActiveSection.endTime;
         }
       } else {
         // Se clicou na mesma seção atual ou fora de seções: pula imediatamente
         setPendingSectionId(null);
-        scheduledFromEndTimeRef.current = null;
+        setPendingMode(null);
+        scheduledTriggerTimeRef.current = null;
         handleSeek(sectionStartTime);
       }
     },
-    [isPlaying, currentSections, currentTime, pendingSectionId, handleSeek]
+    [isPlaying, currentSections, currentTime, currentSong, pendingSectionId, pendingMode, handleSeek]
   );
 
-  // DISPARO NO FIM DA SEÇÃO ATUAL (End of Section):
-  // Deixa a música continuar tocando até atingir o fim (endTime) da seção atual.
-  // No instante exato em que atingir o final, limpa a marcação pendente e salta para a seção agendada.
+  // DISPARO NO FIM DA SEÇÃO (EOS) OU NO PRÓXIMO COMPASSO (NEXT BAR):
+  // No instante exato em que atingir o tempo agendado, limpa a marcação e transporta para o início da seção escolhida
   useEffect(() => {
     if (!pendingSectionId || !isPlaying) return;
 
     const targetSection = currentSections.find((s) => s.id === pendingSectionId);
     if (!targetSection) {
       setPendingSectionId(null);
-      scheduledFromEndTimeRef.current = null;
+      setPendingMode(null);
+      scheduledTriggerTimeRef.current = null;
       return;
     }
 
-    const triggerEndTime = scheduledFromEndTimeRef.current;
-    // Dispara no instante em que atingir o final da seção atual
-    if (triggerEndTime !== null && currentTime >= triggerEndTime - 0.06) {
+    const triggerTime = scheduledTriggerTimeRef.current;
+    if (triggerTime !== null && currentTime >= triggerTime - 0.06) {
       setPendingSectionId(null);
-      scheduledFromEndTimeRef.current = null;
+      setPendingMode(null);
+      scheduledTriggerTimeRef.current = null;
       if (loopSectionId) {
         setLoopSectionId(null);
       }
       handleSeek(targetSection.startTime);
     }
-  }, [currentTime, pendingSectionId, isPlaying, currentSections, loopSectionId, handleSeek]);
+  }, [currentTime, pendingSectionId, pendingMode, isPlaying, currentSections, loopSectionId, handleSeek]);
 
   // Handle volume change - route to appropriate handler
   const handleVolumeChange = useCallback((trackId: string, volume: number) => {
@@ -441,6 +465,7 @@ export default function Index() {
           onToggleLoop={handleToggleLoop}
           onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
           pendingSectionId={pendingSectionId}
+          pendingMode={pendingMode}
           onSectionSelect={handleSectionSelect}
         />
       </main>

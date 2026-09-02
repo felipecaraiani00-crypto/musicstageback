@@ -1,14 +1,15 @@
 import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Section } from "@/types/section";
-import { SectionMarkers } from "./SectionMarkers";
+import { SectionMarkers, TransitionMode } from "./SectionMarkers";
 
 interface WaveformViewProps {
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
   pendingSectionId?: string | null;
-  onSectionSelect?: (sectionId: string, startTime: number) => void;
+  pendingMode?: TransitionMode | null;
+  onSectionSelect?: (sectionId: string, startTime: number, mode: TransitionMode) => void;
   onSeek: (time: number) => void;
   sections?: Section[];
   loopSectionId?: string | null;
@@ -21,6 +22,7 @@ export function WaveformView({
   totalDuration,
   isPlaying,
   pendingSectionId,
+  pendingMode,
   onSectionSelect,
   onSeek,
   sections = [],
@@ -158,6 +160,7 @@ export function WaveformView({
           currentTime={currentTime}
           isPlaying={isPlaying}
           pendingSectionId={pendingSectionId}
+          pendingMode={pendingMode}
           onSectionSelect={onSectionSelect}
           onSeekToSection={onSeek}
           loopSectionId={loopSectionId}

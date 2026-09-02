@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { WaveformView } from "./WaveformView";
 import { HorizontalFaders, FaderTrack } from "./HorizontalFaders";
 import { Section } from "@/types/section";
+import { TransitionMode } from "./SectionMarkers";
 
 interface SongViewerProps {
   currentTime: number;
@@ -20,7 +21,8 @@ interface SongViewerProps {
   onToggleLoop?: (sectionId: string) => void;
   onDeleteSection?: (sectionId: string) => void;
   pendingSectionId?: string | null;
-  onSectionSelect?: (sectionId: string, startTime: number) => void;
+  pendingMode?: TransitionMode | null;
+  onSectionSelect?: (sectionId: string, startTime: number, mode: TransitionMode) => void;
 }
 
 type ViewMode = "waveform" | "faders";
@@ -40,6 +42,7 @@ export function SongViewer({
   onToggleLoop,
   onDeleteSection,
   pendingSectionId,
+  pendingMode,
   onSectionSelect,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
@@ -92,6 +95,7 @@ export function SongViewer({
               totalDuration={totalDuration}
               isPlaying={isPlaying}
               pendingSectionId={pendingSectionId}
+              pendingMode={pendingMode}
               onSectionSelect={onSectionSelect}
               onSeek={onSeek}
               sections={sections}
