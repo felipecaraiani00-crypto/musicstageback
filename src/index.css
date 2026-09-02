@@ -168,4 +168,22 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
   }
+
+  /* Animação suave para a borda da seção agendada para transição (End of Section) */
+  .animate-pending-section {
+    animation: pending-pulse 0.9s ease-in-out infinite;
+  }
+
+  @keyframes pending-pulse {
+    0%, 100% {
+      border-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.2);
+      opacity: 1;
+    }
+    50% {
+      border-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 4px rgba(255, 255, 255, 0.15), inset 0 0 2px rgba(255, 255, 255, 0.05);
+      opacity: 0.7;
+    }
+  }
 }

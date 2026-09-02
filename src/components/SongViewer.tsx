@@ -19,6 +19,8 @@ interface SongViewerProps {
   loopSectionId?: string | null;
   onToggleLoop?: (sectionId: string) => void;
   onDeleteSection?: (sectionId: string) => void;
+  pendingSectionId?: string | null;
+  onSectionSelect?: (sectionId: string, startTime: number) => void;
 }
 
 type ViewMode = "waveform" | "faders";
@@ -37,6 +39,8 @@ export function SongViewer({
   loopSectionId,
   onToggleLoop,
   onDeleteSection,
+  pendingSectionId,
+  onSectionSelect,
 }: SongViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("waveform");
 
@@ -87,6 +91,8 @@ export function SongViewer({
               currentTime={currentTime}
               totalDuration={totalDuration}
               isPlaying={isPlaying}
+              pendingSectionId={pendingSectionId}
+              onSectionSelect={onSectionSelect}
               onSeek={onSeek}
               sections={sections}
               loopSectionId={loopSectionId}

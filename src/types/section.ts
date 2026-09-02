@@ -33,6 +33,24 @@ export function getSectionColor(type: string): string {
   return found?.color || "hsl(285, 75%, 60%)";
 }
 
+// Converte a cor da seção (hsl) para hsla com opacidade/transparência personalizada (ex: 0.15 para fundo, 0.4 para borda)
+export function getSectionColorWithAlpha(color: string, alpha: number): string {
+  if (!color) return `rgba(168, 85, 247, ${alpha})`;
+  const clean = color.trim();
+  if (clean.startsWith("hsl(") && clean.endsWith(")")) {
+    const inner = clean.slice(4, -1);
+    return `hsla(${inner}, ${alpha})`;
+  }
+  if (clean.startsWith("#")) {
+    const hex = clean.slice(1);
+    const r = parseInt(hex.slice(0, 2), 16) || 0;
+    const g = parseInt(hex.slice(2, 4), 16) || 0;
+    const b = parseInt(hex.slice(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return clean;
+}
+
 // Retorna a sigla compacta estilo Playback (ex: V1, R1, IN, PR, P)
 export function getSectionSigla(section: Section, allSections?: Section[]): string {
   const typeLower = (section.type || "").toLowerCase().trim();

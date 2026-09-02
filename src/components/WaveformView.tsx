@@ -7,6 +7,8 @@ interface WaveformViewProps {
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
+  pendingSectionId?: string | null;
+  onSectionSelect?: (sectionId: string, startTime: number) => void;
   onSeek: (time: number) => void;
   sections?: Section[];
   loopSectionId?: string | null;
@@ -18,6 +20,8 @@ export function WaveformView({
   currentTime,
   totalDuration,
   isPlaying,
+  pendingSectionId,
+  onSectionSelect,
   onSeek,
   sections = [],
   loopSectionId,
@@ -153,6 +157,8 @@ export function WaveformView({
           totalDuration={totalDuration}
           currentTime={currentTime}
           isPlaying={isPlaying}
+          pendingSectionId={pendingSectionId}
+          onSectionSelect={onSectionSelect}
           onSeekToSection={onSeek}
           loopSectionId={loopSectionId}
           onToggleLoop={onToggleLoop}
