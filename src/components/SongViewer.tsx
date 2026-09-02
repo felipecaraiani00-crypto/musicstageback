@@ -7,6 +7,7 @@ import { Section } from "@/types/section";
 import { TransitionMode } from "./SectionMarkers";
 
 interface SongViewerProps {
+  songId?: string;
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
@@ -28,6 +29,7 @@ interface SongViewerProps {
 type ViewMode = "waveform" | "faders";
 
 export function SongViewer({
+  songId,
   currentTime,
   totalDuration,
   isPlaying,
@@ -58,24 +60,18 @@ export function SongViewer({
             title="Adicionar ou editar seções"
           >
             <Plus className="w-3.5 h-3.5 text-primary" />
-            <span>+ Adicionar Seção</span>
-            {sections.length > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 bg-primary/20 text-primary rounded-full text-[9px] font-bold">
-                {sections.length}
-              </span>
-            )}
+            <span>Seção</span>
           </button>
         )}
 
         <button
           onClick={() => setViewMode(viewMode === "waveform" ? "faders" : "waveform")}
           className="flex items-center gap-1 px-2.5 rounded-lg text-[10px] font-semibold bg-secondary/60 hover:bg-secondary text-secondary-foreground transition-all border border-border/50 select-none h-7 shadow-sm"
-          title="Alternar entre Waveform e Faders"
         >
           {viewMode === "waveform" ? (
             <>
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Faders</span>
+              <span>Mixer</span>
             </>
           ) : (
             <>
@@ -91,6 +87,7 @@ export function SongViewer({
         {viewMode === "waveform" ? (
           <div className="w-full h-[120px] sm:h-[140px] md:h-[160px] my-auto">
             <WaveformView
+              songId={songId}
               currentTime={currentTime}
               totalDuration={totalDuration}
               isPlaying={isPlaying}

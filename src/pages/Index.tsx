@@ -451,6 +451,7 @@ export default function Index() {
       {/* Main Content — waveform ocupa largura total */}
       <main className="flex-1 px-2 py-1 overflow-hidden min-h-0">
         <SongViewer
+          songId={currentSongId}
           currentTime={currentTime}
           totalDuration={displaySong.duration}
           isPlaying={isPlaying}
