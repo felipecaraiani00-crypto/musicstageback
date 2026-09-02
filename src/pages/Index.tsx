@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Menu, Music, Repeat } from "lucide-react";
+import { Menu, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
@@ -316,25 +316,14 @@ export default function Index() {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden relative">
-      {/* Header */}
-      <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50">
-        <div className="flex items-center gap-2">
-          <div>
-            <h1 className="text-sm font-semibold flex items-center gap-1.5">
-              <Music className="w-4 h-4 text-primary" />
-              {displaySong.title}
-            </h1>
-            <p className="text-[10px] text-muted-foreground">
-              {displaySong.artist || `${displaySong.trackCount || 0} tracks`}
-            </p>
-          </div>
-        </div>
-
+      {/* Header com TimeDisplay e Botão Menu à direita */}
+      <header className="flex items-center justify-end px-3 py-1.5 border-b border-border bg-card/50 min-h-[44px]">
         <div className="flex items-center gap-2">
           <TimeDisplay currentTime={currentTime} totalDuration={displaySong.duration} />
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="transport-btn min-w-[40px] min-h-[40px]"
+            className="transport-btn min-w-[36px] min-h-[36px]"
+            title="Menu / Configurações"
           >
             <Menu className="w-4 h-4" />
           </button>

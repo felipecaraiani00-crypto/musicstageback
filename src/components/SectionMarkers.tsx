@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Section, getSectionLabel } from "@/types/section";
+import { Section } from "@/types/section";
 
 interface SectionMarkersProps {
   sections: Section[];
@@ -12,9 +12,7 @@ interface SectionMarkersProps {
 export function SectionMarkers({
   sections,
   totalDuration,
-  onSeekToSection,
   loopSectionId,
-  onDeleteSection,
 }: SectionMarkersProps) {
   if (sections.length === 0 || totalDuration <= 0) return null;
 
@@ -29,57 +27,28 @@ export function SectionMarkers({
         return (
           <div
             key={section.id}
-            className="absolute top-0 bottom-0 group z-10"
+            className="absolute top-0 bottom-0 pointer-events-none z-10"
             style={{ left: `${startPct}%`, width: `${widthPct}%` }}
-            onClick={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              onSeekToSection(section.startTime);
-            }}
           >
-            {/* Colored band over the range */}
+            {/* Preenchimento colorido/destaque sutil na região da seção sobre a onda */}
             <div
               className={cn(
-                "absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity pointer-events-none",
-                isLooping && "opacity-40"
+                "absolute inset-0 opacity-15 pointer-events-none transition-opacity",
+                isLooping && "opacity-30"
               )}
               style={{ backgroundColor: section.color }}
             />
 
-            {/* Left edge marker */}
+            {/* Linha vertical divisória esquerda */}
             <div
-              className="absolute top-0 bottom-0 left-0 w-0.5 opacity-80"
+              className="absolute top-0 bottom-0 left-0 w-0.5 opacity-70 pointer-events-none"
               style={{ backgroundColor: section.color }}
             />
-            {/* Right edge marker */}
+            {/* Linha vertical divisória direita */}
             <div
-              className="absolute top-0 bottom-0 right-0 w-0.5 opacity-80"
+              className="absolute top-0 bottom-0 right-0 w-0.5 opacity-70 pointer-events-none"
               style={{ backgroundColor: section.color }}
             />
-
-            {/* Label badge */}
-            <div
-              className={cn(
-                "absolute top-0 left-0.5 flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-bold uppercase whitespace-nowrap shadow-md",
-                "opacity-80 group-hover:opacity-100 transition-all",
-                isLooping && "ring-1 ring-white"
-              )}
-              style={{ backgroundColor: section.color, color: "white" }}
-            >
-              <span>{getSectionLabel(section.type)}</span>
-              {onDeleteSection && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteSection(section.id);
-                  }}
-                  className="px-1 rounded leading-none hover:bg-white/20"
-                  title="Excluir"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
           </div>
         );
       })}

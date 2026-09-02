@@ -36,6 +36,65 @@ export function getSectionLabel(type: string): string {
   return found?.label || type;
 }
 
+// Retorna a sigla ou nome curto estilizado da seção (ex: INTRO, V1, V2, CHORUS, BRIDGE, OUTRO)
+export function getSectionTag(section: Section, allSections?: Section[]): string {
+  const typeLower = (section.type || "").toLowerCase().trim();
+
+  let base = "";
+  if (typeLower.includes("intro") || typeLower.includes("count") || typeLower.includes("contagem")) {
+    base = "INTRO";
+  } else if (typeLower.includes("vers") || typeLower.includes("verse")) {
+    base = "V";
+  } else if (typeLower.includes("pr") || typeLower.includes("pre")) {
+    base = "PRE";
+  } else if (typeLower.includes("refr") || typeLower.includes("chorus")) {
+    base = "CHORUS";
+  } else if (typeLower.includes("pont") || typeLower.includes("bridge")) {
+    base = "BRIDGE";
+  } else if (typeLower.includes("solo")) {
+    base = "SOLO";
+  } else if (typeLower.includes("out") || typeLower.includes("fim") || typeLower.includes("final") || typeLower.includes("ending")) {
+    base = "OUTRO";
+  } else {
+    base = (section.type || "").toUpperCase().slice(0, 7);
+  }
+
+  // Se houver múltiplas seções do mesmo tipo, enumera (ex: V1, V2, CHORUS 1, CHORUS 2)
+  if (allSections && allSections.length > 0) {
+    if (base === "V") {
+      const verses = allSections.filter((s) => (s.type || "").toLowerCase().includes("vers"));
+      const idx = verses.findIndex((s) => s.id === section.id);
+      return `V${idx !== -1 ? idx + 1 : 1}`;
+    }
+    if (base === "CHORUS") {
+      const choruses = allSections.filter((s) => {
+        const t = (s.type || "").toLowerCase();
+        return t.includes("refr") || t.includes("chorus");
+      });
+      if (choruses.length > 1) {
+        const idx = choruses.findIndex((s) => s.id === section.id);
+        return `CHORUS ${idx !== -1 ? idx + 1 : 1}`;
+      }
+      return "CHORUS";
+    }
+    if (base === "BRIDGE") {
+      const bridges = allSections.filter((s) => {
+        const t = (s.type || "").toLowerCase();
+        return t.includes("pont") || t.includes("bridge");
+      });
+      if (bridges.length > 1) {
+        const idx = bridges.findIndex((s) => s.id === section.id);
+        return `BRIDGE ${idx !== -1 ? idx + 1 : 1}`;
+      }
+      return "BRIDGE";
+    }
+  }
+
+  if (base === "V") return "V1";
+
+  return base;
+}
+
 // Parse time string (MM:SS:mmm or SS:mmm or SS) to seconds
 export function parseTimeToSeconds(timeStr: string): number {
   if (!timeStr) return 0;
