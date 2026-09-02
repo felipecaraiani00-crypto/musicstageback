@@ -8,27 +8,96 @@ export interface Section {
 }
 
 export const SECTION_TYPES = [
-  { value: "intro", label: "Intro", color: "hsl(200, 85%, 45%)" }, // Tom de azul
-  { value: "count", label: "Contagem", color: "hsl(205, 90%, 48%)" }, // Tom de azul
-  { value: "verse", label: "Verso", color: "hsl(145, 65%, 40%)" }, // Tom de verde
-  { value: "pre-chorus", label: "Pré-Refrão", color: "hsl(35, 92%, 48%)" }, // Tom de amarelo/laranja
-  { value: "chorus", label: "Refrão", color: "hsl(25, 92%, 50%)" }, // Tom de amarelo/laranja
-  { value: "bridge", label: "Ponte", color: "hsl(280, 65%, 50%)" }, // Tom de vermelho/roxo
-  { value: "solo", label: "Solo", color: "hsl(330, 70%, 48%)" }, // Tom de vermelho/roxo
-  { value: "outro", label: "Outro", color: "hsl(220, 15%, 45%)" }, // Tom de cinza
-  { value: "ending", label: "Final", color: "hsl(215, 15%, 45%)" }, // Tom de cinza
+  { value: "intro", label: "Intro", color: "hsl(200, 85%, 50%)" }, // Azul
+  { value: "count", label: "Contagem", color: "hsl(205, 90%, 50%)" }, // Azul
+  { value: "verse", label: "Verso", color: "hsl(285, 75%, 60%)" }, // Roxo (como na foto de referência)
+  { value: "pre-chorus", label: "Pré-Refrão", color: "hsl(45, 95%, 50%)" }, // Amarelo
+  { value: "chorus", label: "Refrão", color: "hsl(28, 95%, 52%)" }, // Laranja (como R1 na foto)
+  { value: "bridge", label: "Ponte", color: "hsl(325, 75%, 55%)" }, // Magenta
+  { value: "solo", label: "Solo", color: "hsl(0, 80%, 55%)" }, // Vermelho
+  { value: "outro", label: "Outro", color: "hsl(220, 15%, 50%)" }, // Cinza
+  { value: "ending", label: "Final", color: "hsl(215, 15%, 50%)" }, // Cinza
 ] as const;
 
 export function getSectionColor(type: string): string {
   const lower = (type || "").toLowerCase().trim();
-  if (lower.includes("intro") || lower.includes("count") || lower.includes("contagem")) return "hsl(200, 85%, 45%)"; // Azul
-  if (lower.includes("vers") || lower.includes("verse")) return "hsl(145, 65%, 40%)"; // Verde
-  if (lower.includes("refr") || lower.includes("chorus") || lower.includes("pr") || lower.includes("pre")) return "hsl(28, 92%, 50%)"; // Amarelo/Laranja
-  if (lower.includes("pont") || lower.includes("bridge") || lower.includes("solo")) return "hsl(280, 65%, 50%)"; // Vermelho/Roxo
-  if (lower.includes("out") || lower.includes("fim") || lower.includes("final")) return "hsl(220, 15%, 45%)"; // Cinza
+  if (lower.includes("intro") || lower.includes("count") || lower.includes("contagem")) return "hsl(200, 85%, 50%)"; // Azul
+  if (lower.includes("vers") || lower.includes("verse")) return "hsl(285, 75%, 60%)"; // Roxo (V1 na foto)
+  if (lower.includes("pr") || lower.includes("pre")) return "hsl(45, 95%, 50%)"; // Amarelo
+  if (lower.includes("refr") || lower.includes("chorus")) return "hsl(28, 95%, 52%)"; // Laranja (R1 na foto)
+  if (lower.includes("pont") || lower.includes("bridge")) return "hsl(325, 75%, 55%)"; // Magenta
+  if (lower.includes("solo")) return "hsl(0, 80%, 55%)"; // Vermelho
+  if (lower.includes("out") || lower.includes("fim") || lower.includes("final")) return "hsl(220, 15%, 50%)"; // Cinza
 
   const found = SECTION_TYPES.find((s) => s.value === type);
-  return found?.color || "hsl(200, 70%, 45%)";
+  return found?.color || "hsl(285, 75%, 60%)";
+}
+
+// Retorna a sigla compacta estilo Playback (ex: V1, R1, IN, PR, P)
+export function getSectionSigla(section: Section, allSections?: Section[]): string {
+  const typeLower = (section.type || "").toLowerCase().trim();
+
+  let base = "";
+  if (typeLower.includes("intro") || typeLower.includes("count") || typeLower.includes("contagem")) {
+    base = "IN";
+  } else if (typeLower.includes("vers") || typeLower.includes("verse")) {
+    base = "V";
+  } else if (typeLower.includes("pr") || typeLower.includes("pre")) {
+    base = "PR";
+  } else if (typeLower.includes("refr") || typeLower.includes("chorus")) {
+    base = "R";
+  } else if (typeLower.includes("pont") || typeLower.includes("bridge")) {
+    base = "P";
+  } else if (typeLower.includes("solo")) {
+    base = "SO";
+  } else if (typeLower.includes("out") || typeLower.includes("fim") || typeLower.includes("final") || typeLower.includes("ending")) {
+    base = "OUT";
+  } else {
+    base = (section.type || "").toUpperCase().slice(0, 2);
+  }
+
+  if (allSections && allSections.length > 0) {
+    if (base === "V") {
+      const verses = allSections.filter((s) => (s.type || "").toLowerCase().includes("vers"));
+      const idx = verses.findIndex((s) => s.id === section.id);
+      return `V${idx !== -1 ? idx + 1 : 1}`;
+    }
+    if (base === "R") {
+      const choruses = allSections.filter((s) => {
+        const t = (s.type || "").toLowerCase();
+        return t.includes("refr") || t.includes("chorus");
+      });
+      const idx = choruses.findIndex((s) => s.id === section.id);
+      return `R${idx !== -1 ? idx + 1 : 1}`;
+    }
+    if (base === "PR") {
+      const pres = allSections.filter((s) => {
+        const t = (s.type || "").toLowerCase();
+        return t.includes("pr") || t.includes("pre");
+      });
+      if (pres.length > 1) {
+        const idx = pres.findIndex((s) => s.id === section.id);
+        return `PR${idx !== -1 ? idx + 1 : 1}`;
+      }
+      return "PR";
+    }
+    if (base === "P") {
+      const bridges = allSections.filter((s) => {
+        const t = (s.type || "").toLowerCase();
+        return t.includes("pont") || t.includes("bridge");
+      });
+      if (bridges.length > 1) {
+        const idx = bridges.findIndex((s) => s.id === section.id);
+        return `P${idx !== -1 ? idx + 1 : 1}`;
+      }
+      return "P";
+    }
+  }
+
+  if (base === "V") return "V1";
+  if (base === "R") return "R1";
+
+  return base;
 }
 
 export function getSectionLabel(type: string): string {

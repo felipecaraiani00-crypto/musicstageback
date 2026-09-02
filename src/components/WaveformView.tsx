@@ -84,26 +84,40 @@ export function WaveformView({
 
     ctx.clearRect(0, 0, width, height);
 
+    // Linha horizontal central
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    // Linhas de grade verticais (beats / compassos) finas e semitransparentes
+    const numGridLines = Math.max(20, Math.floor(width / 32));
+    const gridSpacing = width / numGridLines;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= numGridLines; g++) {
+      const gx = Math.round(g * gridSpacing);
+      ctx.beginPath();
+      ctx.moveTo(gx, 0);
+      ctx.lineTo(gx, height);
+      ctx.stroke();
+    }
+
+    // Renderização das barras da onda em tom prateado/lavanda orgânico conforme imagem
     waveformData.current.forEach((value, i) => {
-      const barHeight = value * (height * 0.8);
+      const barHeight = Math.max(2, value * (height * 0.72));
       const x = i * barWidth;
       const y = (height - barHeight) / 2;
 
-      // Played portion in primary color with gradient effect, unplayed in muted
       if (i < playedBars) {
-        // Create subtle pulse effect near the playhead
-        const distanceFromPlayhead = playedBars - i;
-        if (distanceFromPlayhead < 5) {
-          const brightness = 50 + (5 - distanceFromPlayhead) * 3;
-          ctx.fillStyle = `hsl(190, 95%, ${brightness}%)`;
-        } else {
-          ctx.fillStyle = "hsl(190, 95%, 50%)";
-        }
+        ctx.fillStyle = "rgba(240, 238, 245, 0.95)"; // Porção tocada: prata claro/branco
       } else {
-        ctx.fillStyle = "hsl(220, 15%, 30%)";
+        ctx.fillStyle = "rgba(165, 155, 180, 0.65)"; // Porção não tocada: lavanda suave
       }
 
-      ctx.fillRect(x, y, barWidth - 1, barHeight);
+      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
     });
   }, [displayProgress]);
 
@@ -126,43 +140,37 @@ export function WaveformView({
       className="w-full cursor-pointer h-full overflow-hidden"
       onClick={handleClick}
     >
-      <div className="relative w-full h-full min-h-[40px]">
+      <div className="relative w-full h-full min-h-[50px]">
         <canvas
           ref={canvasRef}
           className="w-full h-full"
           style={{ width: "100%", height: "100%" }}
         />
 
-        {/* Section Markers */}
+        {/* Blocos de Seção Envolvendo a Waveform (Badge circular no topo-esquerdo, loop no topo-direito) */}
         <SectionMarkers
           sections={sections}
           totalDuration={totalDuration}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
           onSeekToSection={onSeek}
           loopSectionId={loopSectionId}
-          onDeleteSection={onDeleteSection}
+          onToggleLoop={onToggleLoop}
         />
         
-        {/* Playhead - follows music in real-time */}
+        {/* Cursor de Reprodução (Playhead) - Linha vertical branca limpa e bem definida cruzando toda a onda */}
         <div
           className={cn(
-            "absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg pointer-events-none",
+            "absolute top-0 bottom-0 w-[2px] bg-white pointer-events-none z-30",
             isPlaying && "transition-none"
           )}
           style={{ 
             left: `${displayProgress}%`,
-            boxShadow: "0 0 8px hsl(var(--accent)), 0 0 16px hsl(var(--accent) / 0.5)"
+            boxShadow: "0 0 6px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.5)"
           }}
         >
-          {/* Playhead triangle marker */}
-          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-2 h-2 bg-accent rotate-45" />
-          
-          {/* Glow effect when playing */}
-          {isPlaying && (
-            <div 
-              className="absolute top-0 bottom-0 w-1 -left-0.5 bg-accent/30 animate-pulse"
-              style={{ filter: "blur(4px)" }}
-            />
-          )}
+          {/* Ponta superior do cursor de reprodução */}
+          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white rotate-45 rounded-xs shadow-md" />
         </div>
       </div>
     </div>

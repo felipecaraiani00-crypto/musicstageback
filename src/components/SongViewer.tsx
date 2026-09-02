@@ -3,7 +3,6 @@ import { AudioWaveform, SlidersHorizontal, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WaveformView } from "./WaveformView";
 import { HorizontalFaders, FaderTrack } from "./HorizontalFaders";
-import { SectionTimelineBar } from "./SectionTimelineBar";
 import { Section } from "@/types/section";
 
 interface SongViewerProps {
@@ -83,30 +82,17 @@ export function SongViewer({
       {/* Container da Waveform / Faders com formato panorâmico centralizado verticalmente */}
       <div className="flex-1 min-h-0 flex flex-col justify-center animate-fade-in">
         {viewMode === "waveform" ? (
-          <div className="w-full flex flex-col my-auto gap-1">
-            {/* Régua de Seções Tipo Timeline: ocupa horizontalmente a proporção real de tempo da música (100% de largura) */}
-            <SectionTimelineBar
-              sections={sections}
-              totalDuration={totalDuration}
+          <div className="w-full h-[120px] sm:h-[140px] md:h-[160px] my-auto">
+            <WaveformView
               currentTime={currentTime}
+              totalDuration={totalDuration}
               isPlaying={isPlaying}
               onSeek={onSeek}
+              sections={sections}
               loopSectionId={loopSectionId}
+              onToggleLoop={onToggleLoop}
+              onDeleteSection={onDeleteSection}
             />
-
-            {/* Waveform View Panorâmica (mesma largura total) */}
-            <div className="w-full h-[90px] sm:h-[110px] md:h-[130px]">
-              <WaveformView
-                currentTime={currentTime}
-                totalDuration={totalDuration}
-                isPlaying={isPlaying}
-                onSeek={onSeek}
-                sections={sections}
-                loopSectionId={loopSectionId}
-                onToggleLoop={onToggleLoop}
-                onDeleteSection={onDeleteSection}
-              />
-            </div>
           </div>
         ) : (
           <div className="w-full h-full flex flex-col">
