@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Music, List, Repeat } from "lucide-react";
+import { Menu, Music, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TransportControls } from "@/components/TransportControls";
 import { SongViewer } from "@/components/SongViewer";
@@ -25,14 +25,8 @@ const initialTracks: FaderTrack[] = [
   { id: "6", name: "Vocals", icon: "🎤", color: "hsl(320, 60%, 50%)", volume: 90 },
 ];
 
-// All available songs in library (demo data) — no native BPM; BPM only for multitrack imports
-const demoSongs: Song[] = [
-  { id: "demo-1", title: "Amazing Grace", artist: "Gospel Arrangement", duration: 192 },
-  { id: "demo-2", title: "How Great Is Our God", artist: "Chris Tomlin", duration: 245 },
-  { id: "demo-3", title: "10,000 Reasons", artist: "Matt Redman", duration: 330 },
-  { id: "demo-4", title: "What A Beautiful Name", artist: "Hillsong Worship", duration: 285 },
-  { id: "demo-5", title: "Reckless Love", artist: "Cory Asbury", duration: 312 },
-];
+// Biblioteca começa vazia — músicas adicionadas via Importar ou Biblioteca
+const demoSongs: Song[] = [];
 
 
 
@@ -89,8 +83,8 @@ export default function Index() {
   
   // Library & Setlist state
   const [librarySongs, setLibrarySongs] = useState<Song[]>(demoSongs);
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(["demo-1", "demo-2", "demo-3"]);
-  const [currentSongId, setCurrentSongId] = useState<string>("demo-1");
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [currentSongId, setCurrentSongId] = useState<string>("");
 
   // Modal states
   const [showSettings, setShowSettings] = useState(false);
@@ -315,17 +309,15 @@ export default function Index() {
     setEngineMasterVolume(masterVolume);
   }, [masterVolume, setEngineMasterVolume]);
 
-  // Use first demo song as fallback
-  const displaySong = currentSong || demoSongs[0];
+  // Placeholder quando nenhuma música está carregada
+  const emptyPlaceholder: Song = { id: "", title: "Nenhuma música carregada", duration: 0 };
+  const displaySong = currentSong || emptyPlaceholder;
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden relative">
       {/* Header */}
       <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
-          <button className="transport-btn min-w-[40px] min-h-[40px]">
-            <List className="w-4 h-4" />
-          </button>
           <div>
             <h1 className="text-sm font-semibold flex items-center gap-1.5">
               <Music className="w-4 h-4 text-primary" />
@@ -343,7 +335,7 @@ export default function Index() {
             onClick={() => setShowSettings(!showSettings)}
             className="transport-btn min-w-[40px] min-h-[40px]"
           >
-            <Settings className="w-4 h-4" />
+            <Menu className="w-4 h-4" />
           </button>
         </div>
       </header>
