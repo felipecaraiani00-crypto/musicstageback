@@ -6,6 +6,7 @@ import { SongViewer } from "@/components/SongViewer";
 import { MasterControls } from "@/components/MasterControls";
 import { TimeDisplay } from "@/components/TimeDisplay";
 import { SongList, Song } from "@/components/SongList";
+import { SetlistCarousel } from "@/components/SetlistCarousel";
 import { MusicLibrary } from "@/components/MusicLibrary";
 import { ImportMusic } from "@/components/ImportMusic";
 import { SettingsMenu } from "@/components/SettingsMenu";
@@ -348,35 +349,30 @@ export default function Index() {
         onOpenImport={() => setShowImport(true)}
       />
 
-      {/* Main Content - Landscape Layout */}
-      <main className="flex-1 px-2 py-1 overflow-hidden min-h-0 flex gap-2">
-        {/* Left side - Waveform/Faders */}
-        <div className="flex-1 min-w-0">
-          <SongViewer
-            currentTime={currentTime}
-            totalDuration={displaySong.duration}
-            isPlaying={isPlaying}
-            onSeek={handleSeek}
-            tracks={activeTracks}
-            onVolumeChange={handleVolumeChange}
-            onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
-            onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
-            sections={currentSections}
-            onOpenSectionEditor={() => setShowSectionEditor(true)}
-            loopSectionId={loopSectionId}
-            onToggleLoop={handleToggleLoop}
-            onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
-          />
-        </div>
+      {/* Setlist Carousel — barra horizontal abaixo do header */}
+      <SetlistCarousel
+        songs={setlistSongs}
+        currentSongId={currentSongId}
+        onSongSelect={handleSongSelect}
+      />
 
-        {/* Right side - Setlist */}
-        <div className="w-[200px] flex-shrink-0">
-          <SongList
-            songs={setlistSongs}
-            currentSongId={currentSongId}
-            onSongSelect={handleSongSelect}
-          />
-        </div>
+      {/* Main Content — waveform ocupa largura total */}
+      <main className="flex-1 px-2 py-1 overflow-hidden min-h-0">
+        <SongViewer
+          currentTime={currentTime}
+          totalDuration={displaySong.duration}
+          isPlaying={isPlaying}
+          onSeek={handleSeek}
+          tracks={activeTracks}
+          onVolumeChange={handleVolumeChange}
+          onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
+          onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
+          sections={currentSections}
+          onOpenSectionEditor={() => setShowSectionEditor(true)}
+          loopSectionId={loopSectionId}
+          onToggleLoop={handleToggleLoop}
+          onDeleteSection={(sectionId) => deleteSection(currentSongId, sectionId)}
+        />
       </main>
 
       {/* Footer Controls - Horizontal Layout */}
