@@ -69,9 +69,17 @@ export function useSections() {
     }));
   }, []);
 
+  const setSongSections = useCallback((songId: string, songSections: Section[]) => {
+    setSections((prev) => ({
+      ...prev,
+      [songId]: [...songSections].sort((a, b) => a.startTime - b.startTime),
+    }));
+  }, []);
+
   return {
     sections,
     getSectionsForSong,
+    setSongSections,
     addSection,
     updateSection,
     deleteSection,

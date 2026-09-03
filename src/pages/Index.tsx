@@ -16,6 +16,7 @@ import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useSections } from "@/hooks/useSections";
 import { Song as AudioSong } from "@/lib/audioEngine";
+import { fetchSongs, fetchSongDetails, mapSupabaseSectionsToApp } from "@/services/supabaseService";
 
 
 const initialTracks: FaderTrack[] = [
@@ -95,7 +96,28 @@ export default function Index() {
   const [showSectionEditor, setShowSectionEditor] = useState(false);
 
   // Sections hook
-  const { getSectionsForSong, addSection, updateSection, deleteSection } = useSections();
+  const { getSectionsForSong, setSongSections, addSection, updateSection, deleteSection } = useSections();
+
+  // Carregar músicas do Supabase com fallback seguro para os dados mockados/atuais
+  useEffect(() => {
+    let isMounted = true;
+    async function loadInitialSongs() {
+      try {
+        const remoteSongs = await fetchSongs();
+        if (isMounted && remoteSongs && remoteSongs.length > 0) {
+          setLibrarySongs(remoteSongs);
+          setSelectedSongIds(remoteSongs.map((s) => s.id));
+          setCurrentSongId(remoteSongs[0].id);
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar músicas do Supabase (mantendo fallback):", err);
+      }
+    }
+    loadInitialSongs();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Merge demo songs with imported audio engine songs
   const allLibrarySongs: Song[] = [
@@ -373,21 +395,33 @@ export default function Index() {
   }, [isImportedSong, toggleInstrumentsFade]);
 
   const handleSongSelect = useCallback((song: Song) => {
+    if (!song || !song.id) return;
     setCurrentSongId(song.id);
     setInstrumentsFaded(false);
     
     // Stop current playback
-    if (audioEngineSongs.some(s => s.id === currentSongId)) {
+    if (audioEngineSongs.some(s => s?.id === currentSongId)) {
       engineStop();
     }
     setDemoIsPlaying(false);
     setDemoCurrentTime(0);
     
     // Update audio engine if it's an imported song
-    if (audioEngineSongs.some(s => s.id === song.id)) {
+    if (audioEngineSongs.some(s => s?.id === song.id)) {
       setEngineCurrentSong(song.id);
     }
-  }, [audioEngineSongs, setEngineCurrentSong, currentSongId, engineStop]);
+
+    // Se a música for do Supabase e ainda não tiver seções em memória, busca os detalhes
+    if (getSectionsForSong(song.id).length === 0) {
+      fetchSongDetails(song.id).then((details) => {
+        if (details && details.sections && details.sections.length > 0) {
+          setSongSections(song.id, mapSupabaseSectionsToApp(details.sections));
+        }
+      }).catch((err) => {
+        console.warn("Aviso ao buscar seções do Supabase:", err);
+      });
+    }
+  }, [audioEngineSongs, setEngineCurrentSong, currentSongId, engineStop, getSectionsForSong, setSongSections]);
 
   const handleToggleLibrarySong = useCallback((songId: string) => {
     setSelectedSongIds((prev) =>
