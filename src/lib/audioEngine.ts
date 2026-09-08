@@ -1,9 +1,18 @@
 // Audio Engine - Manages songs and tracks with hierarchical structure
 
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+}
+
 export interface Track {
   trackId: string;
   trackName: string;
   audioBuffer: AudioBuffer | null;
+  audioUrl?: string; // Blob URL ou URL remota para streaming nativo
+  audioElement?: HTMLAudioElement | null; // Elemento <audio> HTML5 para streaming
+  mediaElementSource?: MediaElementAudioSourceNode | null; // Conexão do elemento <audio> ao AudioContext
   volume: number; // 0.0 to 1.0
   pan: number; // -1.0 (left) to 1.0 (right)
   isMuted: boolean;
@@ -51,6 +60,78 @@ class AudioEngine {
   // Instrument fade state
   private instrumentsFaded: boolean = false;
   private savedInstrumentVolumes: Map<string, number> = new Map();
+
+  // Controle de Object URLs para liberação explícita de memória (Garbage Collection)
+  private createdObjectUrls: Set<string> = new Set();
+
+  registerObjectUrl(url: string): void {
+    if (url && typeof url === 'string' && url.startsWith('blob:')) {
+      this.createdObjectUrls.add(url);
+    }
+  }
+
+  revokeAllObjectUrls(): void {
+    this.createdObjectUrls.forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {}
+    });
+    this.createdObjectUrls.clear();
+  }
+
+  // Liberação explícita de decodificadores e nós de áudio
+  cleanupSongResources(song: Song): void {
+    song.tracks.forEach((track) => {
+      if (track.sourceNode) {
+        try {
+          track.sourceNode.stop();
+          track.sourceNode.disconnect();
+        } catch (e) {}
+        track.sourceNode = null;
+      }
+
+      if (track.mediaElementSource) {
+        try {
+          track.mediaElementSource.disconnect();
+        } catch (e) {}
+        track.mediaElementSource = null;
+      }
+
+      if (track.gainNode) {
+        try {
+          track.gainNode.disconnect();
+        } catch (e) {}
+        track.gainNode = null;
+      }
+
+      if (track.panNode) {
+        try {
+          track.panNode.disconnect();
+        } catch (e) {}
+        track.panNode = null;
+      }
+
+      if (track.audioElement) {
+        try {
+          track.audioElement.pause();
+          track.audioElement.removeAttribute('src');
+          track.audioElement.load(); // Descarrega decodificador interno e buffers do navegador
+        } catch (e) {}
+        track.audioElement = null;
+      }
+
+      if (track.audioUrl && track.audioUrl.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(track.audioUrl);
+          this.createdObjectUrls.delete(track.audioUrl);
+        } catch (e) {}
+      }
+
+      // Limpa referência de buffer grande da memória RAM
+      track.audioBuffer = null;
+      this.trackGainNodes.delete(track.trackId);
+    });
+  }
 
   constructor() {
     this.initAudioContext();
@@ -136,6 +217,25 @@ class AudioEngine {
       track.gainNode = gainNode;
       track.panNode = panNode;
       this.trackGainNodes.set(track.trackId, gainNode);
+
+      // Streaming gradual via elemento <audio> nativo e createMediaElementSource
+      if (track.audioUrl && !track.audioElement && typeof Audio !== 'undefined') {
+        const audio = new Audio();
+        audio.crossOrigin = 'anonymous';
+        audio.preload = 'metadata';
+        audio.src = track.audioUrl;
+        track.audioElement = audio;
+      }
+
+      if (track.audioElement && !track.mediaElementSource) {
+        try {
+          const mediaSource = context.createMediaElementSource(track.audioElement);
+          mediaSource.connect(gainNode);
+          track.mediaElementSource = mediaSource;
+        } catch (err) {
+          console.warn(`[AudioEngine] createMediaElementSource aviso para "${track.trackName}":`, err);
+        }
+      }
     });
 
     this.songs.set(song.id, song);
@@ -148,22 +248,14 @@ class AudioEngine {
     this.notifyListeners();
   }
 
-  // Remove a song
+  // Remove a song com liberação explícita de recursos
   removeSong(songId: string): void {
     const song = this.songs.get(songId);
     if (song) {
-      // Stop if this song is playing
       if (this.currentSongId === songId && this.isPlaying) {
         this.stop();
       }
-      
-      // Cleanup gain nodes
-      song.tracks.forEach(track => {
-        if (track.gainNode) {
-          track.gainNode.disconnect();
-        }
-        this.trackGainNodes.delete(track.trackId);
-      });
+      this.cleanupSongResources(song);
       this.songs.delete(songId);
       
       if (this.currentSongId === songId) {
@@ -172,6 +264,16 @@ class AudioEngine {
       
       this.notifyListeners();
     }
+  }
+
+  // Limpa todas as músicas e força liberação de memória RAM
+  clearAllSongs(): void {
+    this.stop();
+    this.songs.forEach((song) => this.cleanupSongResources(song));
+    this.songs.clear();
+    this.currentSongId = null;
+    this.revokeAllObjectUrls();
+    this.notifyListeners();
   }
 
   // PLAYBACK CONTROLS
@@ -184,26 +286,39 @@ class AudioEngine {
     // Stop any existing playback
     this.stopAllSources();
     
-    // Start all tracks at the current pause position
+    const offset = this.pauseTime;
+
+    // Inicia todas as faixas (tanto <audio> por streaming quanto AudioBuffer)
     song.tracks.forEach(track => {
-      if (!track.audioBuffer || !track.gainNode) return;
-      
-      const sourceNode = context.createBufferSource();
-      sourceNode.buffer = track.audioBuffer;
-      sourceNode.connect(track.gainNode);
-      
-      // Calculate offset and start playback
-      const offset = this.pauseTime;
-      sourceNode.start(0, offset);
-      
-      // Handle track end
-      sourceNode.onended = () => {
-        if (track.sourceNode === sourceNode) {
-          track.sourceNode = null;
+      // 1. Streaming via elemento <audio> nativo (economia massiva de RAM no mobile)
+      if (track.audioElement) {
+        try {
+          track.audioElement.currentTime = offset;
+          const playPromise = track.audioElement.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch((err) => {
+              console.warn(`[AudioEngine] Aviso ao reproduzir <audio> "${track.trackName}":`, err);
+            });
+          }
+        } catch (e) {
+          console.error(`[AudioEngine] Erro ao disparar <audio> "${track.trackName}":`, e);
         }
-      };
-      
-      track.sourceNode = sourceNode;
+      }
+      // 2. Buffer PCM descompactado na memória (fallback)
+      else if (track.audioBuffer && track.gainNode) {
+        const sourceNode = context.createBufferSource();
+        sourceNode.buffer = track.audioBuffer;
+        sourceNode.connect(track.gainNode);
+        sourceNode.start(0, offset);
+        
+        sourceNode.onended = () => {
+          if (track.sourceNode === sourceNode) {
+            track.sourceNode = null;
+          }
+        };
+        
+        track.sourceNode = sourceNode;
+      }
     });
     
     this.startTime = context.currentTime - this.pauseTime;
@@ -235,7 +350,7 @@ class AudioEngine {
   }
 
   stop(): void {
-    this.stopAllSources();
+    this.stopAllSources(true);
     this.isPlaying = false;
     this.pauseTime = 0;
     
@@ -262,35 +377,60 @@ class AudioEngine {
     if (wasPlaying) {
       const context = this.ensureContext();
       
-      // Restart all tracks at new position
+      // Reinicia todas as faixas na nova posição
       song.tracks.forEach(track => {
-        if (!track.audioBuffer || !track.gainNode) return;
-        
-        const sourceNode = context.createBufferSource();
-        sourceNode.buffer = track.audioBuffer;
-        sourceNode.connect(track.gainNode);
-        sourceNode.start(0, clampedTime);
-        
-        sourceNode.onended = () => {
-          if (track.sourceNode === sourceNode) {
-            track.sourceNode = null;
-          }
-        };
-        
-        track.sourceNode = sourceNode;
+        if (track.audioElement) {
+          try {
+            track.audioElement.currentTime = clampedTime;
+            track.audioElement.play().catch(() => {});
+          } catch (e) {}
+        } else if (track.audioBuffer && track.gainNode) {
+          const sourceNode = context.createBufferSource();
+          sourceNode.buffer = track.audioBuffer;
+          sourceNode.connect(track.gainNode);
+          sourceNode.start(0, clampedTime);
+          
+          sourceNode.onended = () => {
+            if (track.sourceNode === sourceNode) {
+              track.sourceNode = null;
+            }
+          };
+          
+          track.sourceNode = sourceNode;
+        }
       });
       
       this.startTime = context.currentTime - clampedTime;
+    } else {
+      // Quando pausado, atualiza o cursor dos elementos de áudio para sincronia no próximo play
+      song.tracks.forEach(track => {
+        if (track.audioElement) {
+          try {
+            track.audioElement.currentTime = clampedTime;
+          } catch (e) {}
+        }
+      });
     }
     
     this.notifyPlayback();
   }
 
-  private stopAllSources(): void {
+  private stopAllSources(resetPosition = false): void {
     const song = this.getCurrentSong();
     if (!song) return;
     
     song.tracks.forEach(track => {
+      // Pausa elementos <audio>
+      if (track.audioElement) {
+        try {
+          track.audioElement.pause();
+          if (resetPosition) {
+            track.audioElement.currentTime = 0;
+          }
+        } catch (e) {}
+      }
+
+      // Interrompe nós de buffer
       if (track.sourceNode) {
         try {
           track.sourceNode.stop();

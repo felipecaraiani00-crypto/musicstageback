@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { audioEngine, Song, Track } from './audioEngine';
+import { audioEngine, Song, Track, isMobileDevice } from './audioEngine';
 
 export interface ImportProgress {
   stage: 'extracting' | 'decoding' | 'complete';
@@ -113,35 +113,93 @@ export async function importZipFile(
       });
 
       try {
-        // Extrai o conteúdo do arquivo como ArrayBuffer
-        const audioData = await zipEntry.async('arraybuffer');
-        
-        // Decodifica com tratamento robusto para Safari/iOS
-        const audioBuffer = await audioEngine.decodeAudioData(audioData, trackName);
-        
-        if (audioBuffer) {
-          maxDuration = Math.max(maxDuration, audioBuffer.duration);
-        } else {
-          console.error(`[ZIP Importer] Canal "${trackName}" falhou na decodificação e foi ignorado.`);
-        }
-
-        const isClick = isClickTrack(trackName);
-        
-        const track: Track = {
-          trackId: generateId(),
-          trackName,
-          audioBuffer,
-          volume: 1.0,
-          pan: 0, // Center by default
-          isMuted: false,
-          isSoloed: false,
-          isClickTrack: isClick,
-          gainNode: null,
-          panNode: null,
-          sourceNode: null,
+        const ext = trackName.toLowerCase().split('.').pop() || 'wav';
+        const mimeTypes: Record<string, string> = {
+          wav: 'audio/wav',
+          mp3: 'audio/mpeg',
+          aiff: 'audio/aiff',
+          flac: 'audio/flac',
+          ogg: 'audio/ogg',
+          m4a: 'audio/mp4',
         };
+        const mimeType = mimeTypes[ext] || 'audio/wav';
 
-        tracks.push(track);
+        // Em dispositivos móveis (Safari/iOS ou Chrome Android), usamos streaming nativo
+        // para não estourar a memória RAM (OOM Crash) com decodificação inteira de 32-bit float
+        if (isMobileDevice()) {
+          const blob = await zipEntry.async('blob');
+          const typedBlob = new Blob([blob], { type: mimeType });
+          const blobUrl = URL.createObjectURL(typedBlob);
+          audioEngine.registerObjectUrl(blobUrl);
+
+          const audioElement = new Audio();
+          audioElement.preload = 'metadata';
+          audioElement.src = blobUrl;
+
+          // Lê a duração dos metadados de forma quase instantânea
+          const duration = await new Promise<number>((resolve) => {
+            if (audioElement.readyState >= 1 && !isNaN(audioElement.duration)) {
+              resolve(audioElement.duration);
+            } else {
+              audioElement.addEventListener('loadedmetadata', () => resolve(audioElement.duration || 0), { once: true });
+              audioElement.addEventListener('error', () => resolve(0), { once: true });
+              setTimeout(() => resolve(audioElement.duration || 0), 2000);
+            }
+          });
+
+          if (duration > 0) {
+            maxDuration = Math.max(maxDuration, duration);
+          }
+
+          const isClick = isClickTrack(trackName);
+
+          const track: Track = {
+            trackId: generateId(),
+            trackName,
+            audioBuffer: null, // Sem alocar PCM bruto de 32-bit na RAM
+            audioUrl: blobUrl,
+            audioElement,
+            mediaElementSource: null,
+            volume: 1.0,
+            pan: 0,
+            isMuted: false,
+            isSoloed: false,
+            isClickTrack: isClick,
+            gainNode: null,
+            panNode: null,
+            sourceNode: null,
+          };
+
+          tracks.push(track);
+        } else {
+          // No Desktop, extrai e decodifica normalmente com fallback para streaming se necessário
+          const audioData = await zipEntry.async('arraybuffer');
+          const audioBuffer = await audioEngine.decodeAudioData(audioData, trackName);
+
+          if (audioBuffer) {
+            maxDuration = Math.max(maxDuration, audioBuffer.duration);
+          } else {
+            console.error(`[ZIP Importer] Canal "${trackName}" falhou na decodificação e foi ignorado.`);
+          }
+
+          const isClick = isClickTrack(trackName);
+
+          const track: Track = {
+            trackId: generateId(),
+            trackName,
+            audioBuffer,
+            volume: 1.0,
+            pan: 0,
+            isMuted: false,
+            isSoloed: false,
+            isClickTrack: isClick,
+            gainNode: null,
+            panNode: null,
+            sourceNode: null,
+          };
+
+          tracks.push(track);
+        }
       } catch (trackError) {
         console.error(`[ZIP Importer] Falha ao processar o canal "${trackName}":`, trackError);
         // Continua com as outras faixas para que um canal com problema não quebre a música!
@@ -286,33 +344,81 @@ export async function importAudioFiles(
       });
 
       try {
-        // Leitura do ArrayBuffer e decodificação isolada por pista
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer, trackName);
+        const blobUrl = URL.createObjectURL(file);
+        audioEngine.registerObjectUrl(blobUrl);
 
-        if (audioBuffer) {
-          maxDuration = Math.max(maxDuration, audioBuffer.duration);
+        if (isMobileDevice()) {
+          const audioElement = new Audio();
+          audioElement.preload = 'metadata';
+          audioElement.src = blobUrl;
+
+          // Lê metadados de duração rapidamente
+          const duration = await new Promise<number>((resolve) => {
+            if (audioElement.readyState >= 1 && !isNaN(audioElement.duration)) {
+              resolve(audioElement.duration);
+            } else {
+              audioElement.addEventListener('loadedmetadata', () => resolve(audioElement.duration || 0), { once: true });
+              audioElement.addEventListener('error', () => resolve(0), { once: true });
+              setTimeout(() => resolve(audioElement.duration || 0), 2000);
+            }
+          });
+
+          if (duration > 0) {
+            maxDuration = Math.max(maxDuration, duration);
+          }
+
+          const isClick = isClickTrack(trackName);
+
+          const track: Track = {
+            trackId: generateId(),
+            trackName,
+            audioBuffer: null, // Sem decodificar para RAM no mobile
+            audioUrl: blobUrl,
+            audioElement,
+            mediaElementSource: null,
+            volume: 1.0,
+            pan: 0,
+            isMuted: false,
+            isSoloed: false,
+            isClickTrack: isClick,
+            gainNode: null,
+            panNode: null,
+            sourceNode: null,
+          };
+
+          tracks.push(track);
         } else {
-          console.error(`[Audio Importer] Falha na decodificação do canal "${trackName}": buffer vazio ou corrompido.`);
+          // No Desktop, lê e decodifica normalmente
+          const arrayBuffer = await file.arrayBuffer();
+          const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer, trackName);
+
+          if (audioBuffer) {
+            maxDuration = Math.max(maxDuration, audioBuffer.duration);
+          } else {
+            console.error(`[Audio Importer] Falha na decodificação do canal "${trackName}": buffer vazio ou corrompido.`);
+          }
+
+          const isClick = isClickTrack(trackName);
+
+          const track: Track = {
+            trackId: generateId(),
+            trackName,
+            audioBuffer,
+            audioUrl: blobUrl,
+            audioElement: null,
+            mediaElementSource: null,
+            volume: 1.0,
+            pan: 0,
+            isMuted: false,
+            isSoloed: false,
+            isClickTrack: isClick,
+            gainNode: null,
+            panNode: null,
+            sourceNode: null,
+          };
+
+          tracks.push(track);
         }
-
-        const isClick = isClickTrack(trackName);
-
-        const track: Track = {
-          trackId: generateId(),
-          trackName,
-          audioBuffer,
-          volume: 1.0,
-          pan: 0,
-          isMuted: false,
-          isSoloed: false,
-          isClickTrack: isClick,
-          gainNode: null,
-          panNode: null,
-          sourceNode: null,
-        };
-
-        tracks.push(track);
       } catch (trackError) {
         console.error(`[Audio Importer] Erro crítico ao decodificar canal "${trackName}":`, trackError);
         // Continua com as outras faixas para que um erro em um canal não quebre o player!

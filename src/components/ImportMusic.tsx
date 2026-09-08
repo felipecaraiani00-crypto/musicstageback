@@ -1,8 +1,8 @@
 import { useState, useRef } from "react";
-import { Upload, FileArchive, Music, X, Plus, Loader2 } from "lucide-react";
+import { Upload, FileArchive, Music, X, Plus, Loader2, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { importZipFile, importAudioFiles, isAudioFile, ImportProgress } from "@/lib/zipImporter";
-import { Song } from "@/lib/audioEngine";
+import { Song, isMobileDevice } from "@/lib/audioEngine";
 
 interface ImportMusicProps {
   onImport: (songs: Song[]) => void;
@@ -187,6 +187,17 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
           <span className="text-xs font-mono text-muted-foreground">
             {formatFileSize(totalSize)} / 700 MB
           </span>
+        </div>
+
+        {/* Dica de Performance Mobile (WAV pesado vs MP3 320k) */}
+        <div className="mt-3 p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 flex items-start gap-2.5 text-xs text-cyan-200">
+          <Smartphone className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <span className="font-semibold text-cyan-300">Dica de Performance Mobile:</span>
+            <p className="text-cyan-200/80 leading-relaxed text-[11px]">
+              Stems em <strong>.WAV</strong> brutos (24-bit / 96kHz) consomem muita memória do navegador móvel. Para performance leve sem risco de travamento no Safari/Chrome móvel, recomendamos o uso de faixas em <strong>.MP3 (320kbps)</strong> ou <strong>.M4A</strong>.
+            </p>
+          </div>
         </div>
       </div>
 

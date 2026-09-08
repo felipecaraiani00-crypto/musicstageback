@@ -3,7 +3,7 @@ import { Song } from "@/components/SongList";
 import { Section, getSectionColor } from "@/types/section";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { getTrackIcon, getTrackColor } from "@/lib/zipImporter";
-import { audioEngine, Track, Song as AudioSong, loadInBatches } from "@/lib/audioEngine";
+import { audioEngine, Track, Song as AudioSong, loadInBatches, isMobileDevice } from "@/lib/audioEngine";
 
 export interface SupabaseSong {
   id: string;
@@ -204,8 +204,20 @@ export async function loadSongFromSupabase(
       return null;
     }
 
-    // Carrega e decodifica via fetch com CORS e tratamento seguro de buffer
-    const audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
+    const isMobile = isMobileDevice();
+    let audioBuffer: AudioBuffer | null = null;
+    let audioElement: HTMLAudioElement | null = null;
+
+    if (isMobile) {
+      // No celular: cria elemento <audio> nativo para streaming sob demanda sem sobrecarregar a RAM
+      audioElement = new Audio();
+      audioElement.crossOrigin = "anonymous";
+      audioElement.preload = "metadata";
+      audioElement.src = fileUrl;
+    } else {
+      // No Desktop: pode baixar e decodificar normalmente
+      audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
+    }
 
     completedCount++;
     onProgress?.(completedCount, total);
@@ -221,6 +233,9 @@ export async function loadSongFromSupabase(
       trackId: t.id || crypto.randomUUID(),
       trackName,
       audioBuffer,
+      audioUrl: fileUrl,
+      audioElement,
+      mediaElementSource: null,
       volume: typeof t.volume === "number" ? t.volume : 1.0,
       pan: typeof t.pan === "number" ? t.pan : 0,
       isMuted: t.is_muted ?? false,
