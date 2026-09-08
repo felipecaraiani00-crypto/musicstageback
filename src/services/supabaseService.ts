@@ -3,6 +3,7 @@ import { Song } from "@/components/SongList";
 import { Section, getSectionColor } from "@/types/section";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { getTrackIcon, getTrackColor } from "@/lib/zipImporter";
+import { audioEngine, Track, Song as AudioSong, loadInBatches } from "@/lib/audioEngine";
 
 export interface SupabaseSong {
   id: string;
@@ -171,4 +172,96 @@ export function mapSupabaseTracksToFaders(supabaseTracks: SupabaseTrack[]): Fade
       isClickTrack: isClick,
     };
   });
+}
+
+/**
+ * Carrega e decodifica as pistas de áudio de uma música do Supabase/Nuvem
+ * em lotes concorrentes (3 faixas por lote com Promise.allSettled)
+ * para não esgotar o pool de conexões HTTP (6 a 12 stems) em navegadores móveis/Safari.
+ */
+export async function loadSongFromSupabase(
+  songId: string,
+  onProgress?: (completed: number, total: number) => void
+): Promise<AudioSong | null> {
+  const details = await fetchSongDetails(songId);
+  if (!details || !details.tracks || details.tracks.length === 0) {
+    console.warn(`[Supabase Loader] Nenhuma faixa encontrada para a música ${songId}.`);
+    return null;
+  }
+
+  const { song, tracks: rawTracks } = details;
+  const songName = song.name || song.title || "Música Nuvem";
+  let completedCount = 0;
+  const total = rawTracks.length;
+
+  // Carrega as faixas em lotes de 3 com Promise.allSettled
+  const batchResults = await loadInBatches(rawTracks, 3, async (t, idx) => {
+    const trackName = t.name || `Pista ${idx + 1}`;
+    const fileUrl = t.file_url ? getAudioPublicUrl(t.file_url) : "";
+
+    if (!fileUrl) {
+      console.error(`[Supabase Loader] URL ausente ou inválida para o canal "${trackName}".`);
+      return null;
+    }
+
+    // Carrega e decodifica via fetch com CORS e tratamento seguro de buffer
+    const audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
+
+    completedCount++;
+    onProgress?.(completedCount, total);
+
+    const isClick =
+      t.is_click ??
+      (trackName.toLowerCase().includes("click") ||
+        trackName.toLowerCase().includes("guia") ||
+        trackName.toLowerCase().includes("guide") ||
+        trackName.toLowerCase().includes("metron"));
+
+    const track: Track = {
+      trackId: t.id || crypto.randomUUID(),
+      trackName,
+      audioBuffer,
+      volume: typeof t.volume === "number" ? t.volume : 1.0,
+      pan: typeof t.pan === "number" ? t.pan : 0,
+      isMuted: t.is_muted ?? false,
+      isSoloed: t.is_soloed ?? false,
+      isClickTrack: isClick,
+      gainNode: null,
+      panNode: null,
+      sourceNode: null,
+    };
+
+    return track;
+  });
+
+  const loadedTracks: Track[] = [];
+  let maxDuration = Number(song.duration) || 0;
+
+  batchResults.forEach((result, idx) => {
+    if (result.status === "fulfilled" && result.value) {
+      loadedTracks.push(result.value);
+      if (result.value.audioBuffer) {
+        maxDuration = Math.max(maxDuration, result.value.audioBuffer.duration);
+      }
+    } else if (result.status === "rejected") {
+      const failedTrackName = rawTracks[idx]?.name || `Pista ${idx + 1}`;
+      console.error(`[Supabase Loader] Falha crítica no canal "${failedTrackName}":`, result.reason);
+    }
+  });
+
+  if (loadedTracks.length === 0) {
+    console.error(`[Supabase Loader] Todas as faixas da música "${songName}" falharam.`);
+    return null;
+  }
+
+  const audioSong: AudioSong = {
+    id: song.id,
+    songName,
+    tracks: loadedTracks,
+    duration: Math.ceil(maxDuration),
+    bpm: song.bpm ? Number(song.bpm) : 120,
+  };
+
+  audioEngine.addSong(audioSong);
+  return audioSong;
 }

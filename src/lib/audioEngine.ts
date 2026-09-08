@@ -64,12 +64,27 @@ class AudioEngine {
     }
   }
 
-  private ensureContext() {
+  // Desbloqueia o AudioContext no Safari/iOS na primeira interação do usuário (clique / toque)
+  async unlockAudioContext(): Promise<void> {
+    const context = this.ensureContext();
+    if (context.state === 'suspended') {
+      try {
+        await context.resume();
+        console.log('[AudioEngine] AudioContext desbloqueado com sucesso via gesto do usuário.');
+      } catch (err) {
+        console.warn('[AudioEngine] Aviso ao desbloquear AudioContext:', err);
+      }
+    }
+  }
+
+  ensureContext(): AudioContext {
     if (!this.audioContext) {
       this.initAudioContext();
     }
     if (this.audioContext?.state === 'suspended') {
-      this.audioContext.resume();
+      this.audioContext.resume().catch((err) => {
+        console.warn('[AudioEngine] AudioContext em suspended (aguardando gesto do usuário):', err);
+      });
     }
     return this.audioContext!;
   }
@@ -529,14 +544,90 @@ class AudioEngine {
     }
   }
 
-  // Decode audio file to AudioBuffer
-  async decodeAudioFile(file: File): Promise<AudioBuffer | null> {
+  /**
+   * Decodificação de áudio segura compatível com Safari/iOS e navegadores modernos.
+   * Suporta tanto Promise quanto callback legado do WebKit, clona o ArrayBuffer
+   * para evitar desvinculação (detaching) e trata buffers corrompidos com logs explícitos por canal.
+   */
+  async decodeAudioData(arrayBuffer: ArrayBuffer, trackName: string = "Canal"): Promise<AudioBuffer | null> {
     try {
       const context = this.ensureContext();
-      const arrayBuffer = await file.arrayBuffer();
-      return await context.decodeAudioData(arrayBuffer);
+      if (context.state === 'suspended') {
+        await context.resume().catch(() => {});
+      }
+
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        console.error(`[AudioEngine] Buffer de áudio vazio ou nulo no canal "${trackName}".`);
+        return null;
+      }
+
+      // Clona o arrayBuffer para proteger contra desanexação de memória pelo WebKit do Safari
+      const bufferCopy = arrayBuffer.slice(0);
+
+      return await new Promise<AudioBuffer>((resolve, reject) => {
+        let isSettled = false;
+
+        const onSuccess = (decoded: AudioBuffer) => {
+          if (!isSettled) {
+            isSettled = true;
+            resolve(decoded);
+          }
+        };
+
+        const onError = (err: any) => {
+          if (!isSettled) {
+            isSettled = true;
+            reject(err);
+          }
+        };
+
+        try {
+          // No Safari legado, decodeAudioData usa callbacks e retorna void/undefined
+          const res = context.decodeAudioData(bufferCopy, onSuccess, onError);
+          if (res && typeof (res as any).then === 'function') {
+            (res as Promise<AudioBuffer>).then(onSuccess).catch(onError);
+          }
+        } catch (callErr) {
+          onError(callErr);
+        }
+      });
     } catch (error) {
-      console.error('Error decoding audio file:', error);
+      console.error(`[AudioEngine] Falha ao decodificar canal "${trackName}":`, error instanceof Error ? error.message : error);
+      return null;
+    }
+  }
+
+  // Decodifica arquivo local File ou Blob com try/catch e logs por canal
+  async decodeAudioFile(file: File | Blob, trackName?: string): Promise<AudioBuffer | null> {
+    const name = trackName || (file instanceof File ? file.name : "Arquivo de áudio");
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      return await this.decodeAudioData(arrayBuffer, name);
+    } catch (error) {
+      console.error(`[AudioEngine] Falha ao ler ArrayBuffer do canal "${name}":`, error instanceof Error ? error.message : error);
+      return null;
+    }
+  }
+
+  // Carrega áudio remoto via fetch com modo CORS / crossOrigin anonymous e timeout
+  async fetchAndDecodeAudio(url: string, trackName: string = "Canal"): Promise<AudioBuffer | null> {
+    try {
+      const response = await fetch(url, {
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'Accept': 'audio/*, */*',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} (${response.statusText})`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      return await this.decodeAudioData(arrayBuffer, trackName);
+    } catch (error) {
+      console.error(`[AudioEngine] Falha ao carregar áudio remoto no canal "${trackName}" (${url}):`, error instanceof Error ? error.message : error);
       return null;
     }
   }
@@ -592,3 +683,35 @@ class AudioEngine {
 
 // Singleton instance
 export const audioEngine = new AudioEngine();
+
+/**
+ * Executa requisições em lotes limitados utilizando Promise.allSettled
+ * para evitar esgotar o pool de conexões HTTP (6 a 12 arquivos) no mobile e Safari.
+ */
+export async function loadInBatches<T, R>(
+  items: T[],
+  batchSize: number = 3,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(
+      batch.map((item, idx) => fn(item, i + idx))
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// Desbloqueia automaticamente o AudioContext no Safari/iOS no primeiro gesto de interação do usuário
+if (typeof window !== "undefined") {
+  const unlockEvents = ["touchstart", "touchend", "pointerdown", "mousedown", "keydown"];
+  const unlockHandler = () => {
+    audioEngine.unlockAudioContext();
+    unlockEvents.forEach((evt) => window.removeEventListener(evt, unlockHandler));
+  };
+  unlockEvents.forEach((evt) =>
+    window.addEventListener(evt, unlockHandler, { passive: true, once: true })
+  );
+}

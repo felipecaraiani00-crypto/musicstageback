@@ -16,7 +16,7 @@ import { FaderTrack } from "@/components/HorizontalFaders";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useSections } from "@/hooks/useSections";
 import { Song as AudioSong } from "@/lib/audioEngine";
-import { fetchSongs, fetchSongDetails, mapSupabaseSectionsToApp } from "@/services/supabaseService";
+import { fetchSongs, fetchSongDetails, mapSupabaseSectionsToApp, loadSongFromSupabase } from "@/services/supabaseService";
 
 
 const initialTracks: FaderTrack[] = [
@@ -419,6 +419,17 @@ export default function Index() {
         }
       }).catch((err) => {
         console.warn("Aviso ao buscar seções do Supabase:", err);
+      });
+    }
+
+    // Se a música for do Supabase e ainda não estiver carregada no audioEngine, carrega as pistas em lote
+    if (!audioEngineSongs.some(s => s?.id === song.id)) {
+      loadSongFromSupabase(song.id).then((loadedSong) => {
+        if (loadedSong) {
+          setEngineCurrentSong(loadedSong.id);
+        }
+      }).catch((err) => {
+        console.error(`[Player] Falha ao carregar multitrack remoto para "${song.title}":`, err);
       });
     }
   }, [audioEngineSongs, setEngineCurrentSong, currentSongId, engineStop, getSectionsForSong, setSongSections]);

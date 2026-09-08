@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
-import { Upload, FileArchive, X, Plus, Loader2 } from "lucide-react";
+import { Upload, FileArchive, Music, X, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { importZipFile, ImportProgress } from "@/lib/zipImporter";
+import { importZipFile, importAudioFiles, isAudioFile, ImportProgress } from "@/lib/zipImporter";
 import { Song } from "@/lib/audioEngine";
 
 interface ImportMusicProps {
@@ -9,9 +9,11 @@ interface ImportMusicProps {
   onClose: () => void;
 }
 
-interface ImportedFile {
+interface ImportedItem {
   id: string;
-  file: File;
+  type: 'zip' | 'audioGroup';
+  file?: File;
+  files: File[];
   name: string;
   size: number;
   status: 'pending' | 'importing' | 'complete' | 'error';
@@ -26,26 +28,51 @@ function formatFileSize(bytes: number): string {
 }
 
 export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
-  const [files, setFiles] = useState<ImportedFile[]>([]);
+  const [files, setFiles] = useState<ImportedItem[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
     
-    // Filter only ZIP files
     const zipFiles = selectedFiles.filter(f => f.name.toLowerCase().endsWith('.zip'));
+    const looseAudioFiles = selectedFiles.filter(f => isAudioFile(f.name));
     
-    const newFiles: ImportedFile[] = zipFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      name: file.name.replace(/\.zip$/i, ""), // Song name from ZIP filename
-      size: file.size,
-      status: 'pending',
-      progress: null,
-    }));
+    const newItems: ImportedItem[] = [];
 
-    setFiles((prev) => [...prev, ...newFiles]);
+    // Arquivos ZIP
+    zipFiles.forEach((file) => {
+      newItems.push({
+        id: crypto.randomUUID(),
+        type: 'zip',
+        file,
+        files: [file],
+        name: file.name.replace(/\.zip$/i, ""),
+        size: file.size,
+        status: 'pending',
+        progress: null,
+      });
+    });
+
+    // Múltiplos arquivos de áudio selecionados (multitrack local)
+    if (looseAudioFiles.length > 0) {
+      const groupSize = looseAudioFiles.reduce((acc, f) => acc + f.size, 0);
+      const firstName = looseAudioFiles[0].name.replace(/\.[^/.]+$/, "");
+      const cleanName = firstName.replace(/[\s_-]*(click|guia|guide|drums|baixo|bass|vocal|guitar|keys|pad).*/i, "").trim() || "Multitrack Importado";
+
+      newItems.push({
+        id: crypto.randomUUID(),
+        type: 'audioGroup',
+        files: looseAudioFiles,
+        name: cleanName,
+        size: groupSize,
+        status: 'pending',
+        progress: null,
+      });
+    }
+
+    setFiles((prev) => [...prev, ...newItems]);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -65,14 +92,19 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
         )
       );
 
-      // Process ZIP file
-      const result = await importZipFile(fileItem.file, (progress) => {
+      const onProg = (progress: ImportProgress) => {
         setFiles((prev) =>
           prev.map((f) =>
             f.id === fileItem.id ? { ...f, progress } : f
           )
         );
-      });
+      };
+
+      // Processa ZIP ou Grupo de Áudios locais isoladamente
+      const result =
+        fileItem.type === 'zip' && fileItem.file
+          ? await importZipFile(fileItem.file, onProg)
+          : await importAudioFiles(fileItem.files, fileItem.name, onProg);
 
       if (result.success && result.song) {
         importedSongs.push(result.song);
@@ -98,7 +130,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
 
     setIsImporting(false);
     
-    // Close if all successful
+    // Fecha se todas forem bem-sucedidas
     const hasErrors = files.some(f => f.status === 'error');
     if (!hasErrors && importedSongs.length > 0) {
       onClose();
@@ -108,7 +140,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
   const totalSize = files.reduce((acc, f) => acc + f.size, 0);
   const maxSize = 700 * 1024 * 1024; // 700 MB - suporta arquivos grandes
 
-  const getStatusIcon = (status: ImportedFile['status']) => {
+  const getStatusIcon = (status: ImportedItem['status']) => {
     switch (status) {
       case 'importing':
         return <Loader2 className="w-4 h-4 animate-spin text-primary" />;
@@ -127,7 +159,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
       <header className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Upload className="w-5 h-5 text-primary" />
-          <h2 className="text-base font-semibold">Importar Músicas (ZIP)</h2>
+          <h2 className="text-base font-semibold">Importar Músicas (ZIP ou Áudios)</h2>
         </div>
         <button
           onClick={onClose}
@@ -140,7 +172,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
       {/* Info */}
       <div className="px-4 py-3 border-b border-border bg-secondary/30">
         <p className="text-xs text-muted-foreground">
-          Importe arquivos ZIP contendo as tracks de áudio (.wav, .mp3). O nome do ZIP será o nome da música.
+          Importe arquivos ZIP ou selecione múltiplos stems (.wav, .mp3). Cada canal é decodificado de forma individual e protegida.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
@@ -168,14 +200,19 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
               file.status === 'error' && "border border-destructive/50"
             )}
           >
-            <FileArchive className="w-8 h-8 text-primary" />
+            {file.type === 'audioGroup' ? (
+              <Music className="w-8 h-8 text-primary" />
+            ) : (
+              <FileArchive className="w-8 h-8 text-primary" />
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{file.name}</p>
               <p className="text-xs text-muted-foreground">
+                {file.type === 'audioGroup' ? `${file.files.length} faixas · ` : ''}
                 {formatFileSize(file.size)}
                 {file.progress && file.status === 'importing' && (
                   <span className="ml-2">
-                    • {file.progress.stage === 'extracting' ? 'Extraindo' : 'Decodificando'}: {file.progress.progress}%
+                    • {file.progress.stage === 'extracting' ? 'Preparando' : 'Decodificando'}: {file.progress.progress}%
                   </span>
                 )}
                 {file.error && (
@@ -207,13 +244,13 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
           )}
         >
           <Plus className="w-5 h-5" />
-          <span className="text-sm">Adicionar arquivos ZIP</span>
+          <span className="text-sm">Adicionar ZIP ou faixas de áudio (.wav, .mp3)</span>
         </button>
 
         <input
           ref={inputRef}
           type="file"
-          accept=".zip"
+          accept=".zip,.wav,.mp3,.aiff,.flac,.ogg,.m4a,audio/*"
           multiple
           onChange={handleFileSelect}
           className="hidden"
@@ -240,7 +277,7 @@ export function ImportMusic({ onImport, onClose }: ImportMusicProps) {
           ) : (
             <>
               <Upload className="w-4 h-4" />
-              Importar {files.length > 0 ? `(${files.length} arquivos)` : ""}
+              Importar {files.length > 0 ? `(${files.length} itens)` : ""}
             </>
           )}
         </button>

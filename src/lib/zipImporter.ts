@@ -20,7 +20,7 @@ function extractSongName(filename: string): string {
 }
 
 // Check if file is an audio file
-function isAudioFile(filename: string): boolean {
+export function isAudioFile(filename: string): boolean {
   const audioExtensions = ['.wav', '.mp3', '.aiff', '.flac', '.ogg', '.m4a'];
   const lowerName = filename.toLowerCase();
   return audioExtensions.some(ext => lowerName.endsWith(ext));
@@ -113,29 +113,16 @@ export async function importZipFile(
       });
 
       try {
-        // Extract file content as ArrayBuffer
+        // Extrai o conteúdo do arquivo como ArrayBuffer
         const audioData = await zipEntry.async('arraybuffer');
         
-        // Get MIME type based on extension
-        const ext = trackName.toLowerCase().split('.').pop();
-        const mimeTypes: Record<string, string> = {
-          'wav': 'audio/wav',
-          'mp3': 'audio/mpeg',
-          'aiff': 'audio/aiff',
-          'flac': 'audio/flac',
-          'ogg': 'audio/ogg',
-          'm4a': 'audio/mp4',
-        };
-        const mimeType = mimeTypes[ext || 'wav'] || 'audio/wav';
-        
-        // Create a File object for decoding
-        const audioFile = new File([audioData], trackName, { type: mimeType });
-        
-        // Decode audio
-        const audioBuffer = await audioEngine.decodeAudioFile(audioFile);
+        // Decodifica com tratamento robusto para Safari/iOS
+        const audioBuffer = await audioEngine.decodeAudioData(audioData, trackName);
         
         if (audioBuffer) {
           maxDuration = Math.max(maxDuration, audioBuffer.duration);
+        } else {
+          console.error(`[ZIP Importer] Canal "${trackName}" falhou na decodificação e foi ignorado.`);
         }
 
         const isClick = isClickTrack(trackName);
@@ -156,8 +143,8 @@ export async function importZipFile(
 
         tracks.push(track);
       } catch (trackError) {
-        console.warn(`Failed to decode track ${trackName}:`, trackError);
-        // Continue with other tracks even if one fails
+        console.error(`[ZIP Importer] Falha ao processar o canal "${trackName}":`, trackError);
+        // Continua com as outras faixas para que um canal com problema não quebre a música!
       }
     }
 
@@ -247,3 +234,117 @@ export function getTrackColor(trackName: string): string {
   const hash = trackName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return `hsl(${hash % 360}, 60%, 50%)`;
 }
+
+/**
+ * Importa múltiplos arquivos de áudio selecionados diretamente pelo usuário (<input type="file" multiple />)
+ * com try/catch e decodificação individual por canal para que uma falha em uma pista não quebre as outras.
+ */
+export async function importAudioFiles(
+  files: File[],
+  customSongName?: string,
+  onProgress?: (progress: ImportProgress) => void
+): Promise<ImportResult> {
+  try {
+    const audioFiles = files.filter(f => isAudioFile(f.name));
+    if (audioFiles.length === 0) {
+      return {
+        success: false,
+        error: 'Nenhum arquivo de áudio válido encontrado.',
+      };
+    }
+
+    // Define o nome da música com base no nome customizado ou no primeiro arquivo
+    const songName = customSongName || extractSongName(audioFiles[0].name) || 'Música Importada';
+    const songId = generateId();
+
+    onProgress?.({
+      stage: 'extracting',
+      currentFile: songName,
+      progress: 5,
+    });
+
+    // Ordena click/guia para o topo
+    audioFiles.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      if (aName.includes('click') || aName.includes('metron') || aName.includes('guia')) return -1;
+      if (bName.includes('click') || bName.includes('metron') || bName.includes('guia')) return 1;
+      return 0;
+    });
+
+    const tracks: Track[] = [];
+    let maxDuration = 0;
+
+    for (let i = 0; i < audioFiles.length; i++) {
+      const file = audioFiles[i];
+      const trackName = file.name;
+
+      onProgress?.({
+        stage: 'decoding',
+        currentFile: trackName,
+        progress: 10 + Math.floor((i / audioFiles.length) * 85),
+      });
+
+      try {
+        // Leitura do ArrayBuffer e decodificação isolada por pista
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer, trackName);
+
+        if (audioBuffer) {
+          maxDuration = Math.max(maxDuration, audioBuffer.duration);
+        } else {
+          console.error(`[Audio Importer] Falha na decodificação do canal "${trackName}": buffer vazio ou corrompido.`);
+        }
+
+        const isClick = isClickTrack(trackName);
+
+        const track: Track = {
+          trackId: generateId(),
+          trackName,
+          audioBuffer,
+          volume: 1.0,
+          pan: 0,
+          isMuted: false,
+          isSoloed: false,
+          isClickTrack: isClick,
+          gainNode: null,
+          panNode: null,
+          sourceNode: null,
+        };
+
+        tracks.push(track);
+      } catch (trackError) {
+        console.error(`[Audio Importer] Erro crítico ao decodificar canal "${trackName}":`, trackError);
+        // Continua com as outras faixas para que um erro em um canal não quebre o player!
+      }
+    }
+
+    onProgress?.({
+      stage: 'complete',
+      currentFile: songName,
+      progress: 100,
+    });
+
+    const song: Song = {
+      id: songId,
+      songName,
+      tracks,
+      duration: Math.ceil(maxDuration),
+      bpm: 120,
+    };
+
+    audioEngine.addSong(song);
+
+    return {
+      success: true,
+      song,
+    };
+  } catch (error) {
+    console.error('[Audio Importer] Erro geral ao importar faixas locais:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao importar arquivos de áudio.',
+    };
+  }
+}
+
