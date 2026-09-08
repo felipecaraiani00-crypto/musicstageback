@@ -35,6 +35,7 @@ export interface AudioEngineState {
   songs: Song[];
   currentSongId: string | null;
   isPlaying: boolean;
+  isBuffering: boolean;
   currentTime: number;
   duration: number;
   instrumentsFaded: boolean;
@@ -52,6 +53,9 @@ class AudioEngine {
   
   // Playback state
   private isPlaying: boolean = false;
+  private isBuffering: boolean = false;
+  private playRequestId: number = 0;
+  private lastSyncCheckTime: number = 0;
   private startTime: number = 0; // AudioContext time when playback started
   private pauseTime: number = 0; // Position in song when paused
   private playbackListeners: Set<PlaybackListener> = new Set();
@@ -277,18 +281,77 @@ class AudioEngine {
   }
 
   // PLAYBACK CONTROLS
-  play(): void {
+  async play(): Promise<void> {
     const song = this.getCurrentSong();
     if (!song || song.tracks.length === 0) return;
     
     const context = this.ensureContext();
-    
+    if (context.state === 'suspended') {
+      await context.resume().catch(() => {});
+    }
+
     // Stop any existing playback
     this.stopAllSources();
     
     const offset = this.pauseTime;
+    const currentRequestId = ++this.playRequestId;
 
-    // Inicia todas as faixas (tanto <audio> por streaming quanto AudioBuffer)
+    // 1. Pré-carregamento com Buffer Seguro antes do Play:
+    // Identifica faixas ativas que utilizam elemento <audio> e verifica se precisam de buffer
+    const elementTracks = song.tracks.filter(t => t.audioElement && !t.isMuted);
+    const needsBuffering = elementTracks.some(t => t.audioElement!.readyState < 3);
+
+    if (needsBuffering) {
+      this.isBuffering = true;
+      this.notifyListeners();
+
+      // Aguarda até que todas atinjam readyState >= 3 (HAVE_FUTURE_DATA ou HAVE_ENOUGH_DATA)
+      const bufferPromises = elementTracks.map(track => {
+        const el = track.audioElement!;
+        if (el.readyState >= 3) return Promise.resolve();
+
+        return new Promise<void>((resolve) => {
+          let resolved = false;
+          const onCanPlay = () => {
+            if (!resolved) {
+              resolved = true;
+              el.removeEventListener('canplay', onCanPlay);
+              el.removeEventListener('canplaythrough', onCanPlay);
+              el.removeEventListener('error', onCanPlay);
+              resolve();
+            }
+          };
+
+          el.addEventListener('canplay', onCanPlay, { once: true });
+          el.addEventListener('canplaythrough', onCanPlay, { once: true });
+          el.addEventListener('error', onCanPlay, { once: true });
+
+          // Se ainda não carregou, força o início do carregamento
+          if (el.readyState === 0) {
+            try {
+              el.load();
+            } catch (e) {}
+          }
+
+          // Timeout de segurança (máximo 2s) para não travar em caso de rede oscilando
+          setTimeout(onCanPlay, 2000);
+        });
+      });
+
+      await Promise.all(bufferPromises);
+
+      // Se durante a espera pelo buffer o usuário cancelou o play (chamou pause/stop)
+      if (this.playRequestId !== currentRequestId) {
+        this.isBuffering = false;
+        this.notifyListeners();
+        return;
+      }
+
+      this.isBuffering = false;
+      this.notifyListeners();
+    }
+
+    // 2. Disparo unificado de todas as faixas sincronizadas
     song.tracks.forEach(track => {
       // 1. Streaming via elemento <audio> nativo (economia massiva de RAM no mobile)
       if (track.audioElement) {
@@ -323,6 +386,7 @@ class AudioEngine {
     
     this.startTime = context.currentTime - this.pauseTime;
     this.isPlaying = true;
+    this.lastSyncCheckTime = performance.now();
     
     // Start time update loop
     this.startTimeUpdateLoop();
@@ -332,6 +396,8 @@ class AudioEngine {
   }
 
   pause(): void {
+    this.playRequestId++;
+    this.isBuffering = false;
     if (!this.isPlaying) return;
     
     const context = this.audioContext;
@@ -350,6 +416,8 @@ class AudioEngine {
   }
 
   stop(): void {
+    this.playRequestId++;
+    this.isBuffering = false;
     this.stopAllSources(true);
     this.isPlaying = false;
     this.pauseTime = 0;
@@ -456,7 +524,24 @@ class AudioEngine {
         this.stop();
         return;
       }
-      
+
+      // Sincronização por Tolerância (Drift Correction Leve):
+      // Verifica o desvio das faixas a cada 200ms para evitar microcortes no áudio no Safari/Chrome móvel.
+      const now = performance.now();
+      if (now - this.lastSyncCheckTime > 200) {
+        this.lastSyncCheckTime = now;
+
+        song.tracks.forEach((track) => {
+          if (track.audioElement && !track.audioElement.paused && !track.isMuted) {
+            const diff = Math.abs(track.audioElement.currentTime - currentTime);
+            // Corrige a posição APENAS se a diferença ultrapassar 50ms (0.05s)
+            if (diff > 0.05) {
+              track.audioElement.currentTime = currentTime;
+            }
+          }
+        });
+      }
+
       this.notifyPlayback();
       this.animationFrameId = requestAnimationFrame(update);
     };
@@ -800,6 +885,7 @@ class AudioEngine {
       songs: this.getSongs(),
       currentSongId: this.currentSongId,
       isPlaying: this.isPlaying,
+      isBuffering: this.isBuffering,
       currentTime: this.getCurrentTime(),
       duration: song?.duration || 0,
       instrumentsFaded: this.instrumentsFaded,
@@ -814,6 +900,7 @@ class AudioEngine {
       songs: this.getSongs(),
       currentSongId: this.currentSongId,
       isPlaying: this.isPlaying,
+      isBuffering: this.isBuffering,
       currentTime: this.getCurrentTime(),
       duration: song?.duration || 0,
       instrumentsFaded: this.instrumentsFaded,

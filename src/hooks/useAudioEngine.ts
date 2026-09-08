@@ -138,6 +138,7 @@ export function useAudioEngine() {
     setCurrentSong,
     // Playback
     isPlaying: playbackState.isPlaying,
+    isBuffering: state.isBuffering,
     currentTime: playbackState.currentTime,
     duration: playbackState.duration,
     play,
@@ -145,5 +146,6 @@ export function useAudioEngine() {
     stop,
     seek,
     togglePlayPause,
+    state,
   };
 }

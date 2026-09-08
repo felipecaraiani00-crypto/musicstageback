@@ -46,6 +46,7 @@ function WaveformView({
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasPlayedRef = useRef<HTMLCanvasElement>(null);
   
   // Waveform dinâmica baseada na música selecionada
   const [waveformData, setWaveformData] = useState<number[]>(() =>
@@ -83,18 +84,22 @@ function WaveformView({
   useEffect(() => {
     if (containerRef.current && isPlaying && !isDragging) {
       const container = containerRef.current;
-      const scrollPosition = (displayProgress / 100) * container.scrollWidth - container.clientWidth / 2;
-      container.scrollTo({ left: Math.max(0, scrollPosition), behavior: "smooth" });
+      if (container.scrollWidth > container.clientWidth) {
+        const scrollPosition = (displayProgress / 100) * container.scrollWidth - container.clientWidth / 2;
+        container.scrollTo({ left: Math.max(0, scrollPosition), behavior: "smooth" });
+      }
     }
   }, [displayProgress, isPlaying, isDragging]);
 
-  // Renderização da forma de onda no Canvas
-  useEffect(() => {
+  // Renderização otimizada da forma de onda no Canvas (disparada apenas quando waveformData mudar ou tela redimensionar)
+  const renderWaveformCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvasPlayed = canvasPlayedRef.current;
+    if (!canvas || !canvasPlayed) return;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctxPlayed = canvasPlayed.getContext("2d");
+    if (!ctx || !ctxPlayed) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -102,15 +107,19 @@ function WaveformView({
 
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
+    canvasPlayed.width = rect.width * dpr;
+    canvasPlayed.height = rect.height * dpr;
+
     ctx.scale(dpr, dpr);
+    ctxPlayed.scale(dpr, dpr);
 
     const width = rect.width;
     const height = rect.height;
     const pointsCount = waveformData.length || 300;
     const barWidth = width / pointsCount;
-    const playedBars = Math.floor((displayProgress / 100) * pointsCount);
 
     ctx.clearRect(0, 0, width, height);
+    ctxPlayed.clearRect(0, 0, width, height);
 
     // Linha horizontal central
     ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
@@ -134,20 +143,34 @@ function WaveformView({
     }
 
     // Barras da forma de onda
+    ctx.fillStyle = "rgba(165, 155, 180, 0.65)"; // Porção não tocada: lavanda suave
+    ctxPlayed.fillStyle = "rgba(240, 238, 245, 0.95)"; // Porção tocada: prata claro/branco
+
+    const barW = Math.max(1, barWidth - 1);
     waveformData.forEach((value, i) => {
       const barHeight = Math.max(2, value * (height * 0.72));
       const x = i * barWidth;
       const y = (height - barHeight) / 2;
 
-      if (i < playedBars) {
-        ctx.fillStyle = "rgba(240, 238, 245, 0.95)"; // Porção tocada: prata claro/branco
-      } else {
-        ctx.fillStyle = "rgba(165, 155, 180, 0.65)"; // Porção não tocada: lavanda suave
-      }
-
-      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
+      ctx.fillRect(x, y, barW, barHeight);
+      ctxPlayed.fillRect(x, y, barW, barHeight);
     });
-  }, [displayProgress, waveformData]);
+  }, [waveformData]);
+
+  useEffect(() => {
+    renderWaveformCanvas();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(() => {
+      renderWaveformCanvas();
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [renderWaveformCanvas]);
 
   // Cálculo da posição de arraste a partir de coordenada X
   const calculatePercentFromX = useCallback((clientX: number): number => {
@@ -236,11 +259,25 @@ function WaveformView({
       className="w-full h-full overflow-hidden select-none relative"
     >
       <div className="relative w-full h-full min-h-[50px]">
+        {/* Camada Base da Forma de Onda (Não tocada) */}
         <canvas
           ref={canvasRef}
-          className="w-full h-full pointer-events-none"
-          style={{ width: "100%", height: "100%" }}
+          className="absolute inset-0 w-full h-full pointer-events-none"
         />
+
+        {/* Camada Tocada (Acelerada via GPU com clip-path, zero redraw durante playback) */}
+        <div
+          className="absolute inset-0 pointer-events-none overflow-hidden"
+          style={{
+            clipPath: `inset(0 ${Math.max(0, 100 - displayProgress)}% 0 0)`,
+            willChange: "clip-path",
+          }}
+        >
+          <canvas
+            ref={canvasPlayedRef}
+            className="w-full h-full pointer-events-none"
+          />
+        </div>
 
         {/* Blocos de Seção Envolvendo a Waveform (Cliques EOS e Next Bar 100% preservados) */}
         <SectionMarkers

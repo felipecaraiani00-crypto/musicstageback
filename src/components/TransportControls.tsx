@@ -1,8 +1,9 @@
-import { Play, Pause, Square, SkipBack, SkipForward, TrendingDown } from "lucide-react";
+import { Play, Pause, Square, SkipBack, SkipForward, TrendingDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TransportControlsProps {
   isPlaying: boolean;
+  isBuffering?: boolean;
   onPlayPause: () => void;
   onStop: () => void;
   onPrev: () => void;
@@ -13,6 +14,7 @@ interface TransportControlsProps {
 
 export function TransportControls({
   isPlaying,
+  isBuffering = false,
   onPlayPause,
   onStop,
   onPrev,
@@ -41,9 +43,12 @@ export function TransportControls({
       <button
         onClick={onPlayPause}
         className="transport-btn-primary min-w-[48px] min-h-[48px]"
-        aria-label={isPlaying ? "Pause" : "Play"}
+        aria-label={isBuffering ? "Bufferizando..." : isPlaying ? "Pause" : "Play"}
+        title={isBuffering ? "Bufferizando áudio seguro..." : isPlaying ? "Pausar" : "Reproduzir"}
       >
-        {isPlaying ? (
+        {isBuffering ? (
+          <Loader2 className="w-5 h-5 animate-spin text-primary-foreground" />
+        ) : isPlaying ? (
           <Pause className="w-5 h-5 fill-current" />
         ) : (
           <Play className="w-5 h-5 fill-current ml-0.5" />

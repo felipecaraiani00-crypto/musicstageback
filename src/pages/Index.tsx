@@ -71,6 +71,7 @@ export default function Index() {
     setCurrentSong: setEngineCurrentSong,
     // Playback controls from audio engine
     isPlaying: engineIsPlaying,
+    isBuffering: engineIsBuffering,
     currentTime: engineCurrentTime,
     play: enginePlay,
     pause: enginePause,
@@ -134,6 +135,7 @@ export default function Index() {
   
   // Use audio engine state for imported songs, demo state otherwise
   const isPlaying = isImportedSong ? engineIsPlaying : demoIsPlaying;
+  const isBuffering = isImportedSong ? engineIsBuffering : false;
   const currentTime = isImportedSong ? engineCurrentTime : demoCurrentTime;
   
   
@@ -544,6 +546,7 @@ export default function Index() {
 
           <TransportControls
             isPlaying={isPlaying}
+            isBuffering={isBuffering}
             onPlayPause={handlePlayPause}
             onStop={handleStop}
             onPrev={handlePrev}
