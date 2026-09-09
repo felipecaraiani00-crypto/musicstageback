@@ -1,6 +1,7 @@
 ﻿// ============================================================
-// AudioEngine — Arquitetura AudioBufferSourceNode
-// Sincronia perfeita via startTime absoluto no AudioContext.
+// AudioEngine — Arquitetura Hibrida
+// Desktop  : AudioBufferSourceNode (sincronia absoluta via startTime)
+// Mobile   : HTMLAudioElement + createMediaElementSource (streaming sem OOM)
 // Compativel com Safari/iOS, Chrome Mobile, Firefox Mobile.
 // ============================================================
 
@@ -12,7 +13,6 @@ export function isMobileDevice(): boolean {
   );
 }
 
-// Interfaces
 export interface Track {
   trackId: string;
   trackName: string;
@@ -59,20 +59,27 @@ class AudioEngine {
   private currentSongId: string | null = null;
   private listeners: Set<StateListener> = new Set();
   private playbackListeners: Set<PlaybackListener> = new Set();
-  private isPlaying = false;
-  private isBuffering = false;
+
+  private isPlaying     = false;
+  private isBuffering   = false;
   private playRequestId = 0;
+
+  // Desktop: tempo absoluto do AudioContext
   private absoluteStartTime = 0;
+  // Posicao pausada (usada por ambas as arquiteturas)
   private pauseOffset = 0;
+
   private animationFrameId: number | null = null;
+  private lastSyncCheckTime  = 0;
   private masterClockTrackId: string | null = null;
+
   private instrumentsFaded = false;
   private savedInstrumentVolumes: Map<string, number> = new Map();
   private createdObjectUrls: Set<string> = new Set();
 
-  constructor() {
-    this.initAudioContext();
-  }
+  constructor() { this.initAudioContext(); }
+
+  // ─── CONTEXTO ────────────────────────────────────────────────────────────────
 
   private initAudioContext(): void {
     if (typeof window === 'undefined' || this.audioContext) return;
@@ -91,6 +98,8 @@ class AudioEngine {
     if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   }
 
+  // ─── OBJECT URL TRACKING ─────────────────────────────────────────────────────
+
   registerObjectUrl(url: string): void {
     if (url?.startsWith('blob:')) this.createdObjectUrls.add(url);
   }
@@ -100,6 +109,8 @@ class AudioEngine {
     this.createdObjectUrls.clear();
   }
 
+  // ─── LIBERACAO DE RECURSOS ───────────────────────────────────────────────────
+
   disposeSong(song: Song): void {
     song.tracks.forEach(track => {
       if (track.sourceNode) {
@@ -107,14 +118,17 @@ class AudioEngine {
         try { track.sourceNode.disconnect(); } catch (_) {}
         track.sourceNode = null;
       }
-      if (track.gainNode) { try { track.gainNode.disconnect(); } catch (_) {} track.gainNode = null; }
-      if (track.panNode)  { try { track.panNode.disconnect();  } catch (_) {} track.panNode  = null; }
+      if (track.mediaElementSource) {
+        try { track.mediaElementSource.disconnect(); } catch (_) {}
+        track.mediaElementSource = null;
+      }
+      if (track.gainNode)  { try { track.gainNode.disconnect(); }  catch (_) {} track.gainNode  = null; }
+      if (track.panNode)   { try { track.panNode.disconnect();  }  catch (_) {} track.panNode   = null; }
       track.audioBuffer = null;
       if (track.audioElement) {
         try { track.audioElement.pause(); track.audioElement.removeAttribute('src'); track.audioElement.load(); } catch (_) {}
         track.audioElement = null;
       }
-      if (track.mediaElementSource) { try { track.mediaElementSource.disconnect(); } catch (_) {} track.mediaElementSource = null; }
       if (track.audioUrl?.startsWith('blob:')) {
         try { URL.revokeObjectURL(track.audioUrl); } catch (_) {}
         this.createdObjectUrls.delete(track.audioUrl!);
@@ -125,6 +139,8 @@ class AudioEngine {
 
   cleanupSongResources(song: Song): void { this.disposeSong(song); }
 
+  // ─── CRUD DE MUSICAS ──────────────────────────────────────────────────────────
+
   getSongs(): Song[] { return Array.from(this.songs.values()); }
   getSong(id: string): Song | undefined { return this.songs.get(id); }
   getCurrentSong(): Song | undefined { return this.currentSongId ? this.songs.get(this.currentSongId) : undefined; }
@@ -133,7 +149,7 @@ class AudioEngine {
     if (!this.songs.has(songId)) return;
     if (this.isPlaying) this.stop();
     this.currentSongId = songId;
-    this.pauseOffset = 0;
+    this.pauseOffset   = 0;
     this.notifyListeners();
   }
 
@@ -141,6 +157,7 @@ class AudioEngine {
     const ctx = this.ensureContext();
     song.tracks.forEach(track => {
       if (track.gainNode && track.panNode) return;
+
       const gainNode = ctx.createGain();
       const panNode  = ctx.createStereoPanner();
       gainNode.gain.value = track.isMuted ? 0 : track.volume;
@@ -150,7 +167,36 @@ class AudioEngine {
       track.gainNode = gainNode;
       track.panNode  = panNode;
       this.trackGainNodes.set(track.trackId, gainNode);
+
+      // Mobile: conecta audioElement ao grafo Web Audio via createMediaElementSource
+      // Isso preserva todos os efeitos (volume, mute, solo, fade, pan) sem decodificar para RAM
+      if (track.audioElement && !track.mediaElementSource) {
+        try {
+          const src = ctx.createMediaElementSource(track.audioElement);
+          src.connect(gainNode);
+          track.mediaElementSource = src;
+        } catch (err) {
+          console.warn(`[AudioEngine] createMediaElementSource aviso "${track.trackName}":`, err);
+        }
+      }
+
+      // Cria audioElement a partir de audioUrl se nao existir e nao ha audioBuffer (mobile remoto)
+      if (track.audioUrl && !track.audioElement && !track.audioBuffer && typeof Audio !== 'undefined') {
+        const el = new Audio();
+        el.crossOrigin = 'anonymous';
+        el.preload = 'metadata';
+        el.src = track.audioUrl;
+        track.audioElement = el;
+        try {
+          const src = ctx.createMediaElementSource(el);
+          src.connect(gainNode);
+          track.mediaElementSource = src;
+        } catch (err) {
+          console.warn(`[AudioEngine] createMediaElementSource (url) aviso "${track.trackName}":`, err);
+        }
+      }
     });
+
     this.songs.set(song.id, song);
     if (!this.currentSongId) this.currentSongId = song.id;
     this.notifyListeners();
@@ -177,21 +223,27 @@ class AudioEngine {
     this.notifyListeners();
   }
 
-  // PLAYBACK
+  // ─── PLAYBACK ─────────────────────────────────────────────────────────────────
+
   async play(): Promise<void> {
     const song = this.getCurrentSong();
     if (!song || song.tracks.length === 0) return;
 
-    // 1. Destrava AudioContext (Autoplay Policy)
+    // 1. Destrava AudioContext (primeiro gesto do usuario obrigatorio no Safari/iOS)
     const ctx = this.ensureContext();
     if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
 
+    // Para fontes ativas anteriores
     this.stopAllSources();
     const requestId = ++this.playRequestId;
     const offset    = this.pauseOffset;
 
-    // 2. Decode sob demanda para faixas com URL mas sem buffer (mobile supabase)
-    const needDecode = song.tracks.filter(t => !t.audioBuffer && t.audioUrl);
+    // Separa faixas por tipo de engine
+    const bufferTracks  = song.tracks.filter(t => t.audioBuffer && t.gainNode);
+    const elementTracks = song.tracks.filter(t => t.audioElement && !t.audioBuffer && t.gainNode);
+
+    // 2. Decode sob demanda para faixas remotas sem buffer e sem elemento (desktop remoto)
+    const needDecode = song.tracks.filter(t => !t.audioBuffer && !t.audioElement && t.audioUrl);
     if (needDecode.length > 0) {
       this.isBuffering = true;
       this.notifyListeners();
@@ -201,7 +253,10 @@ class AudioEngine {
         await Promise.allSettled(
           needDecode.slice(i, i + BATCH).map(async track => {
             const buf = await this.fetchAndDecodeAudio(track.audioUrl!, track.trackName).catch(() => null);
-            if (buf) track.audioBuffer = buf;
+            if (buf) {
+              track.audioBuffer = buf;
+              bufferTracks.push(track);
+            }
           })
         );
       }
@@ -209,27 +264,75 @@ class AudioEngine {
       this.isBuffering = false;
       this.notifyListeners();
     }
-    if (this.playRequestId !== requestId) return;
 
-    // 3. Master clock
-    const ready = song.tracks.filter(t => t.audioBuffer);
-    const master = ready.find(t => t.isClickTrack || this.isClickOrGuideTrack(t)) ?? ready[0] ?? null;
+    // 3. Pre-buffer minimo para elementos <audio> mobile (nao bloqueante, max 1s)
+    const mobileActive = elementTracks.filter(t => !t.isMuted);
+    const needBuffer   = mobileActive.filter(t => t.audioElement!.readyState < 2);
+    if (needBuffer.length > 0) {
+      this.isBuffering = true;
+      this.notifyListeners();
+      await Promise.allSettled(
+        needBuffer.map(track => new Promise<void>(resolve => {
+          const el = track.audioElement!;
+          if (el.readyState >= 2) { resolve(); return; }
+          let done = false;
+          const settle = () => { if (!done) { done = true; resolve(); } };
+          el.addEventListener('canplay', settle, { once: true });
+          el.addEventListener('canplaythrough', settle, { once: true });
+          el.addEventListener('error', settle, { once: true });
+          if (el.readyState === 0) try { el.load(); } catch (_) {}
+          setTimeout(settle, 1000);
+        }))
+      );
+      if (this.playRequestId !== requestId) { this.isBuffering = false; this.notifyListeners(); return; }
+      this.isBuffering = false;
+      this.notifyListeners();
+    }
+
+    // 4. MASTER CLOCK
+    const allReady = [...bufferTracks, ...mobileActive];
+    const master   = allReady.find(t => t.isClickTrack || this.isClickOrGuideTrack(t)) ?? allReady[0] ?? null;
     this.masterClockTrackId = master?.trackId ?? null;
 
-    // 4. StartTime absoluto +50ms: TODAS as faixas iniciam no mesmo nanosegundo
-    const startTime = ctx.currentTime + 0.05;
-    song.tracks.forEach(track => {
-      if (!track.audioBuffer || !track.gainNode) return;
-      const src = ctx.createBufferSource();
-      src.buffer = track.audioBuffer;
-      src.connect(track.gainNode);
-      src.onended = () => { if (track.sourceNode === src) track.sourceNode = null; };
-      src.start(startTime, offset);
-      track.sourceNode = src;
-    });
+    // 5a. DESKTOP: startTime absoluto +50ms — sincronia de nanosegundo
+    if (bufferTracks.length > 0) {
+      const startTime = ctx.currentTime + 0.05;
+      bufferTracks.forEach(track => {
+        if (!track.audioBuffer || !track.gainNode) return;
+        const src = ctx.createBufferSource();
+        src.buffer = track.audioBuffer;
+        src.connect(track.gainNode);
+        src.onended = () => { if (track.sourceNode === src) track.sourceNode = null; };
+        src.start(startTime, offset);
+        track.sourceNode = src;
+      });
+      this.absoluteStartTime = startTime - offset;
+    }
 
-    this.absoluteStartTime = startTime - offset;
+    // 5b. MOBILE: posiciona todos e dispara em conjunto via Promise.allSettled
+    if (elementTracks.length > 0) {
+      elementTracks.forEach(track => {
+        const el = track.audioElement!;
+        try { el.currentTime = offset; } catch (_) {}
+      });
+      // Dispara todos no mesmo tick — catch isolado por faixa
+      Promise.allSettled(
+        mobileActive.map(track =>
+          track.audioElement!.play().catch(err =>
+            console.warn(`[AudioEngine] play() aviso "${track.trackName}":`, err)
+          )
+        )
+      );
+      // Se nao houver buffer tracks, usa currentTime do elemento como referencia
+      if (bufferTracks.length === 0) {
+        this.absoluteStartTime = ctx.currentTime - offset;
+      }
+    }
+
+    if (this.playRequestId !== requestId) return;
+
     this.isPlaying = true;
+    this.lastSyncCheckTime = performance.now();
     this.startTimeUpdateLoop();
     this.notifyPlayback();
     this.notifyListeners();
@@ -251,7 +354,7 @@ class AudioEngine {
     this.playRequestId++;
     this.isBuffering = false;
     this.stopAllSources();
-    this.isPlaying = false;
+    this.isPlaying  = false;
     this.pauseOffset = 0;
     this.stopTimeUpdateLoop();
     this.notifyPlayback();
@@ -265,17 +368,25 @@ class AudioEngine {
     const t = Math.max(0, Math.min(time, song.duration));
     if (wasPlaying) this.stopAllSources();
     this.pauseOffset = t;
+
     if (wasPlaying) {
       const ctx = this.ensureContext();
+      // Buffer tracks: re-agenda com novo startTime
       const startTime = ctx.currentTime + 0.02;
       song.tracks.forEach(track => {
-        if (!track.audioBuffer || !track.gainNode) return;
-        const src = ctx.createBufferSource();
-        src.buffer = track.audioBuffer;
-        src.connect(track.gainNode);
-        src.onended = () => { if (track.sourceNode === src) track.sourceNode = null; };
-        src.start(startTime, t);
-        track.sourceNode = src;
+        if (track.audioBuffer && track.gainNode) {
+          const src = ctx.createBufferSource();
+          src.buffer = track.audioBuffer;
+          src.connect(track.gainNode);
+          src.onended = () => { if (track.sourceNode === src) track.sourceNode = null; };
+          src.start(startTime, t);
+          track.sourceNode = src;
+        }
+        // Element tracks: reposiciona e reinicia
+        if (track.audioElement && !track.audioBuffer) {
+          try { track.audioElement.currentTime = t; } catch (_) {}
+          if (!track.isMuted) track.audioElement.play().catch(() => {});
+        }
       });
       this.absoluteStartTime = startTime - t;
     }
@@ -291,23 +402,60 @@ class AudioEngine {
     if (!song) return;
     song.tracks.forEach(track => {
       if (track.sourceNode) {
-        try { track.sourceNode.stop(); }      catch (_) {}
+        try { track.sourceNode.stop(); }       catch (_) {}
         try { track.sourceNode.disconnect(); } catch (_) {}
         track.sourceNode = null;
+      }
+      if (track.audioElement) {
+        try { track.audioElement.pause(); } catch (_) {}
       }
     });
   }
 
+  // ─── LOOP INTERNO ─────────────────────────────────────────────────────────────
+
   private startTimeUpdateLoop(): void {
-    let lastNotifyMs = 0;
+    let lastNotifyMs    = 0;
+
     const update = () => {
       if (!this.isPlaying) return;
       const song = this.getCurrentSong();
       if (!song) return;
-      const t = this.getCurrentTime();
-      if (t >= song.duration) { this.stop(); return; }
+      const currentTime = this.getCurrentTime();
+      if (currentTime >= song.duration) { this.stop(); return; }
+
       const now = performance.now();
-      if (now - lastNotifyMs >= 60) { lastNotifyMs = now; this.notifyPlayback(); }
+
+      // Drift correction para faixas <audio> mobile (200ms throttle, tolerancia 40ms)
+      if (now - this.lastSyncCheckTime > 200) {
+        this.lastSyncCheckTime = now;
+
+        // Tempo de referencia: master clock ou AudioContext
+        const masterTrack = this.masterClockTrackId
+          ? song.tracks.find(t => t.trackId === this.masterClockTrackId)
+          : null;
+        const masterEl = masterTrack?.audioElement;
+        const masterTime = masterEl && !masterEl.paused
+          ? masterEl.currentTime
+          : currentTime;
+
+        song.tracks.forEach(track => {
+          if (track.trackId === this.masterClockTrackId) return;
+          if (track.audioElement && !track.audioElement.paused && !track.isMuted) {
+            const diff = Math.abs(track.audioElement.currentTime - masterTime);
+            if (diff > 0.04) {
+              track.audioElement.currentTime = masterTime;
+            }
+          }
+        });
+      }
+
+      // Notifica React a ~16fps (60ms) — nao sobrecarrega setState
+      if (now - lastNotifyMs >= 60) {
+        lastNotifyMs = now;
+        this.notifyPlayback();
+      }
+
       this.animationFrameId = requestAnimationFrame(update);
     };
     this.animationFrameId = requestAnimationFrame(update);
@@ -329,13 +477,16 @@ class AudioEngine {
 
   getIsPlaying(): boolean { return this.isPlaying; }
 
-  setTrackVolume(trackId: string, newVolume: number): void {
-    const vol = Math.max(0, Math.min(1, newVolume));
+  // ─── VOLUME / MUTE / SOLO / PAN ───────────────────────────────────────────────
+
+  setTrackVolume(trackId: string, vol: number): void {
+    const v = Math.max(0, Math.min(1, vol));
     for (const song of this.songs.values()) {
       const track = song.tracks.find(t => t.trackId === trackId);
       if (track) {
-        track.volume = vol;
-        if (track.gainNode && !track.isMuted) track.gainNode.gain.setValueAtTime(vol, this.audioContext?.currentTime ?? 0);
+        track.volume = v;
+        if (track.gainNode && !track.isMuted)
+          track.gainNode.gain.setValueAtTime(v, this.audioContext?.currentTime ?? 0);
         this.notifyListeners();
         return;
       }
@@ -345,7 +496,17 @@ class AudioEngine {
   toggleTrackMute(trackId: string): boolean {
     for (const song of this.songs.values()) {
       const track = song.tracks.find(t => t.trackId === trackId);
-      if (track) { track.isMuted = !track.isMuted; this.updateTrackGains(song); this.notifyListeners(); return track.isMuted; }
+      if (track) {
+        track.isMuted = !track.isMuted;
+        this.updateTrackGains(song);
+        // Para faixas element: pausa ou retoma conforme mute
+        if (track.audioElement && this.isPlaying) {
+          if (track.isMuted) track.audioElement.pause();
+          else track.audioElement.play().catch(() => {});
+        }
+        this.notifyListeners();
+        return track.isMuted;
+      }
     }
     return false;
   }
@@ -353,7 +514,12 @@ class AudioEngine {
   toggleTrackSolo(trackId: string): boolean {
     for (const song of this.songs.values()) {
       const track = song.tracks.find(t => t.trackId === trackId);
-      if (track) { track.isSoloed = !track.isSoloed; this.updateTrackGains(song); this.notifyListeners(); return track.isSoloed; }
+      if (track) {
+        track.isSoloed = !track.isSoloed;
+        this.updateTrackGains(song);
+        this.notifyListeners();
+        return track.isSoloed;
+      }
     }
     return false;
   }
@@ -393,7 +559,7 @@ class AudioEngine {
     if (!song) return;
     const cPan = clickToLeft ? -1 :  1;
     const iPan = clickToLeft ?  1 : -1;
-    const now = this.audioContext?.currentTime ?? 0;
+    const now  = this.audioContext?.currentTime ?? 0;
     song.tracks.forEach(track => {
       const p = track.isClickTrack ? cPan : iPan;
       track.pan = p;
@@ -406,7 +572,10 @@ class AudioEngine {
     const song = this.getCurrentSong();
     if (!song) return;
     const now = this.audioContext?.currentTime ?? 0;
-    song.tracks.forEach(track => { track.pan = 0; if (track.panNode) track.panNode.pan.setValueAtTime(0, now); });
+    song.tracks.forEach(track => {
+      track.pan = 0;
+      if (track.panNode) track.panNode.pan.setValueAtTime(0, now);
+    });
     this.notifyListeners();
   }
 
@@ -415,6 +584,8 @@ class AudioEngine {
     const n = (track.trackName || '').toLowerCase();
     return ['click','guide','metronome','metro','count','cue','guia','voz guia'].some(k => n.includes(k));
   }
+
+  // ─── FADE DE INSTRUMENTOS ─────────────────────────────────────────────────────
 
   fadeInstruments(fadeOut: boolean, duration = 4.5): void {
     const song = this.getCurrentSong();
@@ -449,18 +620,22 @@ class AudioEngine {
     if (this.masterGainNode) this.masterGainNode.gain.setValueAtTime(v, this.audioContext?.currentTime ?? 0);
   }
 
-  async decodeAudioData(arrayBuffer: ArrayBuffer, trackName = 'Canal'): Promise<AudioBuffer | null> {
+  // ─── DECODE DE AUDIO ──────────────────────────────────────────────────────────
+
+  async decodeAudioData(ab: ArrayBuffer, trackName = 'Canal'): Promise<AudioBuffer | null> {
     try {
       const ctx = this.ensureContext();
       if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
-      if (!arrayBuffer || arrayBuffer.byteLength === 0) { console.error(`[AudioEngine] Buffer vazio no canal "${trackName}".`); return null; }
-      const copy = arrayBuffer.slice(0);
+      if (!ab || ab.byteLength === 0) { console.error(`[AudioEngine] Buffer vazio "${trackName}".`); return null; }
+      const copy = ab.slice(0);
       return await new Promise<AudioBuffer>((resolve, reject) => {
         let done = false;
         const ok  = (b: AudioBuffer) => { if (!done) { done = true; resolve(b); } };
         const err = (e: unknown)     => { if (!done) { done = true; reject(e);  } };
-        try { const r = ctx.decodeAudioData(copy, ok, err); if (r && typeof (r as any).then === 'function') (r as Promise<AudioBuffer>).then(ok).catch(err); }
-        catch (e) { err(e); }
+        try {
+          const r = ctx.decodeAudioData(copy, ok, err);
+          if (r && typeof (r as any).then === 'function') (r as Promise<AudioBuffer>).then(ok).catch(err);
+        } catch (e) { err(e); }
       });
     } catch (error) {
       console.error(`[AudioEngine] Falha ao decodificar "${trackName}":`, error instanceof Error ? error.message : error);
@@ -471,20 +646,21 @@ class AudioEngine {
   async decodeAudioFile(file: File | Blob, trackName?: string): Promise<AudioBuffer | null> {
     const name = trackName || (file instanceof File ? file.name : 'Arquivo de audio');
     try { const ab = await file.arrayBuffer(); return await this.decodeAudioData(ab, name); }
-    catch (error) { console.error(`[AudioEngine] Falha ao ler "${name}":`, error instanceof Error ? error.message : error); return null; }
+    catch (e) { console.error(`[AudioEngine] Falha ao ler "${name}":`, e instanceof Error ? e.message : e); return null; }
   }
 
   async fetchAndDecodeAudio(url: string, trackName = 'Canal'): Promise<AudioBuffer | null> {
     try {
       const res = await fetch(url, { mode: 'cors', credentials: 'omit', headers: { 'Accept': 'audio/*, */*' } });
       if (!res.ok) throw new Error(`HTTP ${res.status} (${res.statusText})`);
-      const ab = await res.arrayBuffer();
-      return await this.decodeAudioData(ab, trackName);
-    } catch (error) {
-      console.error(`[AudioEngine] Falha ao carregar remoto "${trackName}" (${url}):`, error instanceof Error ? error.message : error);
+      return await this.decodeAudioData(await res.arrayBuffer(), trackName);
+    } catch (e) {
+      console.error(`[AudioEngine] Falha ao carregar "${trackName}" (${url}):`, e instanceof Error ? e.message : e);
       return null;
     }
   }
+
+  // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
   subscribe(listener: StateListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   subscribeToPlayback(listener: PlaybackListener): () => void { this.playbackListeners.add(listener); return () => this.playbackListeners.delete(listener); }
@@ -497,13 +673,13 @@ class AudioEngine {
 
   private notifyListeners(): void {
     const song = this.getCurrentSong();
-    const state: AudioEngineState = {
+    const st: AudioEngineState = {
       songs: this.getSongs(), currentSongId: this.currentSongId,
       isPlaying: this.isPlaying, isBuffering: this.isBuffering,
       currentTime: this.getCurrentTime(), duration: song?.duration ?? 0,
       instrumentsFaded: this.instrumentsFaded,
     };
-    this.listeners.forEach(l => l(state));
+    this.listeners.forEach(l => l(st));
   }
 
   getState(): AudioEngineState {
@@ -525,8 +701,7 @@ export async function loadInBatches<T, R>(
 ): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = [];
   for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const br = await Promise.allSettled(batch.map((item, idx) => fn(item, i + idx)));
+    const br = await Promise.allSettled(items.slice(i, i + batchSize).map((item, idx) => fn(item, i + idx)));
     results.push(...br);
   }
   return results;
