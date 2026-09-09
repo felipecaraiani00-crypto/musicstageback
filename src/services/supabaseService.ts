@@ -206,18 +206,10 @@ export async function loadSongFromSupabase(
 
     const isMobile = isMobileDevice();
     let audioBuffer: AudioBuffer | null = null;
-    let audioElement: HTMLAudioElement | null = null;
 
-    if (isMobile) {
-      // No celular: cria elemento <audio> nativo para streaming sob demanda sem sobrecarregar a RAM
-      audioElement = new Audio();
-      audioElement.crossOrigin = "anonymous";
-      audioElement.preload = "metadata";
-      audioElement.src = fileUrl;
-    } else {
-      // No Desktop: pode baixar e decodificar normalmente
-      audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
-    }
+    // Ambas as plataformas usam fetch + decodeAudioData (AudioBufferSourceNode).
+    // O decode em lote (loadInBatches) ja limita a 3 conexoes simultaneas no mobile.
+    audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
 
     completedCount++;
     onProgress?.(completedCount, total);
@@ -234,7 +226,7 @@ export async function loadSongFromSupabase(
       trackName,
       audioBuffer,
       audioUrl: fileUrl,
-      audioElement,
+      audioElement: null,
       mediaElementSource: null,
       volume: typeof t.volume === "number" ? t.volume : 1.0,
       pan: typeof t.pan === "number" ? t.pan : 0,
