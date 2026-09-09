@@ -56,6 +56,7 @@ class AudioEngine {
   private isBuffering: boolean = false;
   private playRequestId: number = 0;
   private lastSyncCheckTime: number = 0;
+  private masterClockTrackId: string | null = null; // ID da faixa mestre para drift correction
   private startTime: number = 0; // AudioContext time when playback started
   private pauseTime: number = 0; // Position in song when paused
   private playbackListeners: Set<PlaybackListener> = new Set();
@@ -296,51 +297,63 @@ class AudioEngine {
     const offset = this.pauseTime;
     const currentRequestId = ++this.playRequestId;
 
-    // 1. Pré-carregamento com Buffer Seguro antes do Play:
-    // Identifica faixas ativas que utilizam elemento <audio> e verifica se precisam de buffer
+    // Identifica faixas <audio> (streaming nativo)
     const elementTracks = song.tracks.filter(t => t.audioElement && !t.isMuted);
-    const needsBuffering = elementTracks.some(t => t.audioElement!.readyState < 3);
+
+    // ─── MASTER CLOCK ──────────────────────────────────────────────────────────
+    // Define como master clock a primeira faixa com isClickTrack=true ou cujo
+    // nome contenha 'click' / 'guide' / 'guia' / 'metronome'. Se nenhuma, usa a
+    // primeira faixa ativa disponível. O master clock é a referência para o
+    // drift correction; todas as outras faixas são corrigidas em relação a ele.
+    const masterTrack =
+      elementTracks.find(t => t.isClickTrack || this.isClickOrGuideTrack(t)) ??
+      elementTracks[0] ??
+      null;
+    this.masterClockTrackId = masterTrack?.trackId ?? null;
+
+    // ─── PRÉ-BUFFER: readyState >= 4 (HAVE_ENOUGH_DATA) ───────────────────────
+    // Aguarda canplaythrough (readyState 4) de todas as faixas ativas antes de
+    // disparar. Isso garante que o áudio decodificado esteja completamente
+    // armazenado em buffer no navegador antes do play unificado.
+    const needsBuffering = elementTracks.some(t => t.audioElement!.readyState < 4);
 
     if (needsBuffering) {
       this.isBuffering = true;
       this.notifyListeners();
 
-      // Aguarda até que todas atinjam readyState >= 3 (HAVE_FUTURE_DATA ou HAVE_ENOUGH_DATA)
+      // Aguarda readyState >= 4 (HAVE_ENOUGH_DATA / canplaythrough) em todas as faixas
       const bufferPromises = elementTracks.map(track => {
         const el = track.audioElement!;
-        if (el.readyState >= 3) return Promise.resolve();
+        if (el.readyState >= 4) return Promise.resolve();
 
         return new Promise<void>((resolve) => {
           let resolved = false;
-          const onCanPlay = () => {
+          const settle = () => {
             if (!resolved) {
               resolved = true;
-              el.removeEventListener('canplay', onCanPlay);
-              el.removeEventListener('canplaythrough', onCanPlay);
-              el.removeEventListener('error', onCanPlay);
+              el.removeEventListener('canplaythrough', settle);
+              el.removeEventListener('error', settle);
               resolve();
             }
           };
 
-          el.addEventListener('canplay', onCanPlay, { once: true });
-          el.addEventListener('canplaythrough', onCanPlay, { once: true });
-          el.addEventListener('error', onCanPlay, { once: true });
+          // canplaythrough = o navegador acredita ter dados suficientes para tocar sem interrupção
+          el.addEventListener('canplaythrough', settle, { once: true });
+          el.addEventListener('error', settle, { once: true });
 
-          // Se ainda não carregou, força o início do carregamento
+          // Força o início do carregamento caso ainda não tenha iniciado
           if (el.readyState === 0) {
-            try {
-              el.load();
-            } catch (e) {}
+            try { el.load(); } catch (_) {}
           }
 
-          // Timeout de segurança (máximo 2s) para não travar em caso de rede oscilando
-          setTimeout(onCanPlay, 2000);
+          // Timeout de proteção de 2.5s (rede instável ou faixa muito longa)
+          setTimeout(settle, 2500);
         });
       });
 
       await Promise.all(bufferPromises);
 
-      // Se durante a espera pelo buffer o usuário cancelou o play (chamou pause/stop)
+      // Se o usuário cancelou o play enquanto aguardava o buffer, aborta
       if (this.playRequestId !== currentRequestId) {
         this.isBuffering = false;
         this.notifyListeners();
@@ -351,39 +364,43 @@ class AudioEngine {
       this.notifyListeners();
     }
 
-    // 2. Disparo unificado de todas as faixas sincronizadas
+    // ─── DISPARO SIMULTÂNEO VIA Promise.all ────────────────────────────────────
+    // Todas as faixas <audio> são posicionadas na mesma posição e disparadas
+    // juntas no mesmo ciclo de microtask via Promise.all para máxima sincronia.
+    const playPromises: Promise<void>[] = [];
+
+    elementTracks.forEach(track => {
+      const el = track.audioElement!;
+      try {
+        el.currentTime = offset;
+      } catch (_) {}
+      playPromises.push(
+        el.play().catch(err => {
+          console.warn(`[AudioEngine] Aviso ao reproduzir <audio> "${track.trackName}":`, err);
+        })
+      );
+    });
+
+    // Buffer PCM fallback (não streaming) — disparo síncrono normal
     song.tracks.forEach(track => {
-      // 1. Streaming via elemento <audio> nativo (economia massiva de RAM no mobile)
-      if (track.audioElement) {
-        try {
-          track.audioElement.currentTime = offset;
-          const playPromise = track.audioElement.play();
-          if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch((err) => {
-              console.warn(`[AudioEngine] Aviso ao reproduzir <audio> "${track.trackName}":`, err);
-            });
-          }
-        } catch (e) {
-          console.error(`[AudioEngine] Erro ao disparar <audio> "${track.trackName}":`, e);
-        }
-      }
-      // 2. Buffer PCM descompactado na memória (fallback)
-      else if (track.audioBuffer && track.gainNode) {
+      if (!track.audioElement && track.audioBuffer && track.gainNode) {
         const sourceNode = context.createBufferSource();
         sourceNode.buffer = track.audioBuffer;
         sourceNode.connect(track.gainNode);
         sourceNode.start(0, offset);
-        
         sourceNode.onended = () => {
-          if (track.sourceNode === sourceNode) {
-            track.sourceNode = null;
-          }
+          if (track.sourceNode === sourceNode) track.sourceNode = null;
         };
-        
         track.sourceNode = sourceNode;
       }
     });
-    
+
+    // Aguarda confirmação de todos os play() — o navegador os dispara em conjunto
+    await Promise.all(playPromises).catch(() => {});
+
+    // Cancela se houve interrupção durante o disparo
+    if (this.playRequestId !== currentRequestId) return;
+
     this.startTime = context.currentTime - this.pauseTime;
     this.isPlaying = true;
     this.lastSyncCheckTime = performance.now();
@@ -525,18 +542,37 @@ class AudioEngine {
         return;
       }
 
-      // Sincronização por Tolerância (Drift Correction Leve):
-      // Verifica o desvio das faixas a cada 200ms para evitar microcortes no áudio no Safari/Chrome móvel.
+      // ─── DRIFT CORRECTION COM MASTER CLOCK ─────────────────────────────────
+      // Verifica o desvio a cada 200ms. Usa o currentTime do Master Clock como
+      // referência de tempo real (em vez do AudioContext.currentTime, que pode
+      // divergir do playback real do elemento <audio> no WebKit).
+      // Corrige as faixas escravas APENAS se desviarem mais de 40ms do master.
       const now = performance.now();
       if (now - this.lastSyncCheckTime > 200) {
         this.lastSyncCheckTime = now;
 
+        // Determina o tempo de referência: Master Clock ou AudioContext como fallback
+        const masterTrack = this.masterClockTrackId
+          ? song.tracks.find(t => t.trackId === this.masterClockTrackId)
+          : null;
+
+        const masterTime =
+          masterTrack?.audioElement && !masterTrack.audioElement.paused
+            ? masterTrack.audioElement.currentTime
+            : currentTime; // fallback: tempo calculado pelo AudioContext
+
         song.tracks.forEach((track) => {
+          // O master clock não corrige a si mesmo
+          if (track.trackId === this.masterClockTrackId) return;
+
           if (track.audioElement && !track.audioElement.paused && !track.isMuted) {
-            const diff = Math.abs(track.audioElement.currentTime - currentTime);
-            // Corrige a posição APENAS se a diferença ultrapassar 50ms (0.05s)
-            if (diff > 0.05) {
-              track.audioElement.currentTime = currentTime;
+            const diff = Math.abs(track.audioElement.currentTime - masterTime);
+            // Corrige APENAS se o desvio ultrapassar 40ms (0.04s)
+            if (diff > 0.04) {
+              console.debug(
+                `[AudioEngine] Drift correction em "${track.trackName}": desvio ${(diff * 1000).toFixed(1)}ms → corrigindo para ${masterTime.toFixed(3)}s`
+              );
+              track.audioElement.currentTime = masterTime;
             }
           }
         });
