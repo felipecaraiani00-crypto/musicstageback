@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // AudioEngine — Arquitetura de Áudio Profissional
 // Desktop : AudioBufferSourceNode (sincronia de nanossegundo via Web Audio API)
 // Mobile  : HTMLAudioElement Nativo (streaming direto sem OOM, sem silêncio do WebKit, sem engasgos)
@@ -355,8 +355,9 @@ class AudioEngine {
         el.playbackRate = 1.0;
       });
 
-      // Dispara imediatamente no mesmo tick da interação do usuário
-      mobileActive.forEach(track => {
+      // Dispara todos os elementos no mesmo tick da interação do usuário
+      // Faixas mutadas iniciam com .muted = true em background, desmutando instantaneamente ao clique
+      elementTracks.forEach(track => {
         const el = track.audioElement!;
         const p = el.play();
         if (p && typeof p.catch === 'function') {
@@ -595,18 +596,28 @@ class AudioEngine {
 
   private updateTrackGains(song: Song): void {
     const hasSolo = song.tracks.some(t => t.isSoloed);
-    const now = this.audioContext?.currentTime ?? 0;
-    song.tracks.forEach(track => {
-      const vol = track.isMuted ? 0 : (hasSolo && !track.isSoloed ? 0 : track.volume);
+    const ctx = this.audioContext;
+    const now = ctx?.currentTime ?? 0;
 
-      // Web Audio (Desktop)
+    song.tracks.forEach(track => {
+      const isMutedEffective = track.isMuted || (hasSolo && !track.isSoloed);
+      const vol = isMutedEffective ? 0 : track.volume;
+
+      // 1. Web Audio (Desktop)
       if (track.gainNode) {
-        track.gainNode.gain.setValueAtTime(vol, now);
+        try {
+          if (ctx) track.gainNode.gain.cancelScheduledValues(now);
+          track.gainNode.gain.setValueAtTime(vol, now);
+        } catch (_) {}
+        track.gainNode.gain.value = vol;
       }
 
-      // Áudio Nativo (Mobile)
+      // 2. Áudio Nativo (Mobile) — no iOS/Android, o controle de hardware é via .muted!
       if (track.audioElement) {
-        track.audioElement.volume = Math.max(0, Math.min(1, vol * this.masterVolume));
+        track.audioElement.muted = isMutedEffective;
+        try {
+          track.audioElement.volume = Math.max(0, Math.min(1, vol * this.masterVolume));
+        } catch (_) {}
       }
     });
   }

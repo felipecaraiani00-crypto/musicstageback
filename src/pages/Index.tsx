@@ -364,6 +364,10 @@ export default function Index() {
   const handleMuteToggle = useCallback((trackId: string) => {
     if (isImportedSong) {
       handleTrackMuteToggle(trackId);
+    } else {
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, isMuted: !t.isMuted } : t))
+      );
     }
   }, [isImportedSong, handleTrackMuteToggle]);
 
@@ -371,6 +375,10 @@ export default function Index() {
   const handleSoloToggle = useCallback((trackId: string) => {
     if (isImportedSong) {
       handleTrackSoloToggle(trackId);
+    } else {
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, isSoloed: !t.isSoloed } : t))
+      );
     }
   }, [isImportedSong, handleTrackSoloToggle]);
 
@@ -505,8 +513,8 @@ export default function Index() {
           onSeek={handleSeek}
           tracks={activeTracks}
           onVolumeChange={handleVolumeChange}
-          onMuteToggle={isImportedSong ? handleMuteToggle : undefined}
-          onSoloToggle={isImportedSong ? handleSoloToggle : undefined}
+          onMuteToggle={handleMuteToggle}
+          onSoloToggle={handleSoloToggle}
           sections={currentSections}
           onOpenSectionEditor={() => setShowSectionEditor(true)}
           loopSectionId={loopSectionId}

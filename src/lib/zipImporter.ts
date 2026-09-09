@@ -349,7 +349,7 @@ export async function importAudioFiles(
 
         if (isMobileDevice()) {
           const audioElement = new Audio();
-          audioElement.preload = 'metadata';
+          audioElement.preload = 'auto';
           audioElement.src = blobUrl;
 
           // Lê metadados de duração rapidamente
