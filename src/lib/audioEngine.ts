@@ -1,8 +1,8 @@
-// ============================================================
-// AudioEngine — Arquitetura Hibrida
-// Desktop  : AudioBufferSourceNode (sincronia absoluta via startTime)
-// Mobile   : HTMLAudioElement + createMediaElementSource (streaming sem OOM)
-// Compativel com Safari/iOS, Chrome Mobile, Firefox Mobile.
+﻿// ============================================================
+// AudioEngine — Arquitetura de Áudio Profissional
+// Desktop : AudioBufferSourceNode (sincronia de nanossegundo via Web Audio API)
+// Mobile  : HTMLAudioElement Nativo (streaming direto sem OOM, sem silêncio do WebKit, sem engasgos)
+// Compatível com Safari/iOS, Chrome Mobile, Android, Firefox.
 // ============================================================
 
 export function isMobileDevice(): boolean {
@@ -54,38 +54,51 @@ type PlaybackListener = (state: { isPlaying: boolean; currentTime: number; durat
 class AudioEngine {
   private audioContext: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
+  private masterVolume: number = 1.0;
+
   private songs: Map<string, Song> = new Map();
   private trackGainNodes: Map<string, GainNode> = new Map();
   private currentSongId: string | null = null;
+
   private listeners: Set<StateListener> = new Set();
   private playbackListeners: Set<PlaybackListener> = new Set();
 
-  private isPlaying     = false;
-  private isBuffering   = false;
-  private playRequestId = 0;
+  private isPlaying: boolean = false;
+  private isBuffering: boolean = false;
+  private playRequestId: number = 0;
 
-  // Desktop: tempo absoluto do AudioContext
-  private absoluteStartTime = 0;
-  // Posicao pausada (usada por ambas as arquiteturas)
-  private pauseOffset = 0;
+  // Desktop: tempo absoluto de referência
+  private absoluteStartTime: number = 0;
+  // Posição pausada
+  private pauseOffset: number = 0;
 
   private animationFrameId: number | null = null;
-  private lastSyncCheckTime  = 0;
+  private lastSyncCheckTime: number = 0;
   private masterClockTrackId: string | null = null;
 
-  private instrumentsFaded = false;
+  // Fade de instrumentos
+  private instrumentsFaded: boolean = false;
   private savedInstrumentVolumes: Map<string, number> = new Map();
+  private fadeIntervals: Map<HTMLAudioElement, number> = new Map();
+
   private createdObjectUrls: Set<string> = new Set();
 
-  constructor() { this.initAudioContext(); }
+  constructor() {
+    this.initAudioContext();
+  }
 
   // ─── CONTEXTO ────────────────────────────────────────────────────────────────
 
   private initAudioContext(): void {
     if (typeof window === 'undefined' || this.audioContext) return;
-    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    this.masterGainNode = this.audioContext.createGain();
-    this.masterGainNode.connect(this.audioContext.destination);
+    try {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.masterGainNode = this.audioContext.createGain();
+      this.masterGainNode.gain.setValueAtTime(this.masterVolume, this.audioContext.currentTime);
+      this.masterGainNode.connect(this.audioContext.destination);
+    } catch (e) {
+      console.warn('[AudioEngine] Erro ao inicializar AudioContext:', e);
+    }
   }
 
   ensureContext(): AudioContext {
@@ -95,23 +108,56 @@ class AudioEngine {
 
   async unlockAudioContext(): Promise<void> {
     const ctx = this.ensureContext();
-    if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') {
+      await ctx.resume().catch(() => {});
+    }
   }
 
-  // ─── OBJECT URL TRACKING ─────────────────────────────────────────────────────
+  // ─── GERENCIAMENTO DE RECURSOS ───────────────────────────────────────────────
 
   registerObjectUrl(url: string): void {
     if (url?.startsWith('blob:')) this.createdObjectUrls.add(url);
   }
 
   revokeAllObjectUrls(): void {
-    this.createdObjectUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch (_) {} });
+    this.createdObjectUrls.forEach(url => {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    });
     this.createdObjectUrls.clear();
   }
 
-  // ─── LIBERACAO DE RECURSOS ───────────────────────────────────────────────────
+  private clearAllFadeIntervals(): void {
+    this.fadeIntervals.forEach(id => clearInterval(id));
+    this.fadeIntervals.clear();
+  }
+
+  private fadeAudioElement(el: HTMLAudioElement, targetVolume: number, durationSec: number): void {
+    const existing = this.fadeIntervals.get(el);
+    if (existing) {
+      clearInterval(existing);
+      this.fadeIntervals.delete(el);
+    }
+
+    const startVol = el.volume;
+    const startTime = performance.now();
+    const durationMs = durationSec * 1000;
+
+    const interval = window.setInterval(() => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      el.volume = Math.max(0, Math.min(1, startVol + (targetVolume - startVol) * progress));
+
+      if (progress >= 1) {
+        clearInterval(interval);
+        this.fadeIntervals.delete(el);
+      }
+    }, 30);
+
+    this.fadeIntervals.set(el, interval);
+  }
 
   disposeSong(song: Song): void {
+    this.clearAllFadeIntervals();
     song.tracks.forEach(track => {
       if (track.sourceNode) {
         try { track.sourceNode.stop(); } catch (_) {}
@@ -122,11 +168,21 @@ class AudioEngine {
         try { track.mediaElementSource.disconnect(); } catch (_) {}
         track.mediaElementSource = null;
       }
-      if (track.gainNode)  { try { track.gainNode.disconnect(); }  catch (_) {} track.gainNode  = null; }
-      if (track.panNode)   { try { track.panNode.disconnect();  }  catch (_) {} track.panNode   = null; }
+      if (track.gainNode) {
+        try { track.gainNode.disconnect(); } catch (_) {}
+        track.gainNode = null;
+      }
+      if (track.panNode) {
+        try { track.panNode.disconnect(); } catch (_) {}
+        track.panNode = null;
+      }
       track.audioBuffer = null;
       if (track.audioElement) {
-        try { track.audioElement.pause(); track.audioElement.removeAttribute('src'); track.audioElement.load(); } catch (_) {}
+        try {
+          track.audioElement.pause();
+          track.audioElement.removeAttribute('src');
+          track.audioElement.load();
+        } catch (_) {}
         track.audioElement = null;
       }
       if (track.audioUrl?.startsWith('blob:')) {
@@ -137,63 +193,60 @@ class AudioEngine {
     });
   }
 
-  cleanupSongResources(song: Song): void { this.disposeSong(song); }
+  cleanupSongResources(song: Song): void {
+    this.disposeSong(song);
+  }
 
-  // ─── CRUD DE MUSICAS ──────────────────────────────────────────────────────────
+  // ─── CRUD DE MÚSICAS ──────────────────────────────────────────────────────────
 
   getSongs(): Song[] { return Array.from(this.songs.values()); }
   getSong(id: string): Song | undefined { return this.songs.get(id); }
-  getCurrentSong(): Song | undefined { return this.currentSongId ? this.songs.get(this.currentSongId) : undefined; }
+  getCurrentSong(): Song | undefined {
+    return this.currentSongId ? this.songs.get(this.currentSongId) : undefined;
+  }
 
   setCurrentSong(songId: string): void {
     if (!this.songs.has(songId)) return;
     if (this.isPlaying) this.stop();
     this.currentSongId = songId;
-    this.pauseOffset   = 0;
+    this.pauseOffset = 0;
     this.notifyListeners();
   }
 
   addSong(song: Song): void {
     const ctx = this.ensureContext();
+
     song.tracks.forEach(track => {
-      if (track.gainNode && track.panNode) return;
-
-      const gainNode = ctx.createGain();
-      const panNode  = ctx.createStereoPanner();
-      gainNode.gain.value = track.isMuted ? 0 : track.volume;
-      panNode.pan.value   = track.pan;
-      gainNode.connect(panNode);
-      panNode.connect(this.masterGainNode!);
-      track.gainNode = gainNode;
-      track.panNode  = panNode;
-      this.trackGainNodes.set(track.trackId, gainNode);
-
-      // Mobile: conecta audioElement ao grafo Web Audio via createMediaElementSource
-      // Isso preserva todos os efeitos (volume, mute, solo, fade, pan) sem decodificar para RAM
-      if (track.audioElement && !track.mediaElementSource) {
-        try {
-          const src = ctx.createMediaElementSource(track.audioElement);
-          src.connect(gainNode);
-          track.mediaElementSource = src;
-        } catch (err) {
-          console.warn(`[AudioEngine] createMediaElementSource aviso "${track.trackName}":`, err);
+      // Cria os nós Web Audio para faixas Desktop (AudioBufferSourceNode)
+      if (!track.gainNode || !track.panNode) {
+        const gainNode = ctx.createGain();
+        const panNode  = ctx.createStereoPanner();
+        gainNode.gain.value = track.isMuted ? 0 : track.volume;
+        panNode.pan.value   = track.pan;
+        gainNode.connect(panNode);
+        if (this.masterGainNode) {
+          panNode.connect(this.masterGainNode);
         }
+        track.gainNode = gainNode;
+        track.panNode  = panNode;
+        this.trackGainNodes.set(track.trackId, gainNode);
       }
 
-      // Cria audioElement a partir de audioUrl se nao existir e nao ha audioBuffer (mobile remoto)
+      // No mobile: o elemento <audio> toca DIRETAMENTE na saída do aparelho!
+      // NÃO redirecionamos via createMediaElementSource para não ativar bugs de silêncio do iOS/WebKit.
+      if (track.audioElement) {
+        const targetVol = track.isMuted ? 0 : Math.max(0, Math.min(1, track.volume * this.masterVolume));
+        track.audioElement.volume = targetVol;
+      }
+
+      // Se veio de URL remota no mobile sem elemento, instancia o <audio>
       if (track.audioUrl && !track.audioElement && !track.audioBuffer && typeof Audio !== 'undefined') {
         const el = new Audio();
         el.crossOrigin = 'anonymous';
-        el.preload = 'metadata';
+        el.preload = 'auto';
         el.src = track.audioUrl;
+        el.volume = track.isMuted ? 0 : Math.max(0, Math.min(1, track.volume * this.masterVolume));
         track.audioElement = el;
-        try {
-          const src = ctx.createMediaElementSource(el);
-          src.connect(gainNode);
-          track.mediaElementSource = src;
-        } catch (err) {
-          console.warn(`[AudioEngine] createMediaElementSource (url) aviso "${track.trackName}":`, err);
-        }
       }
     });
 
@@ -223,26 +276,27 @@ class AudioEngine {
     this.notifyListeners();
   }
 
-  // ─── PLAYBACK ─────────────────────────────────────────────────────────────────
+  // ─── REPRODUÇÃO (PLAYBACK) ────────────────────────────────────────────────────
 
   async play(): Promise<void> {
     const song = this.getCurrentSong();
     if (!song || song.tracks.length === 0) return;
 
-    // 1. Destrava AudioContext (primeiro gesto do usuario obrigatorio no Safari/iOS)
+    // 1. Destrava AudioContext síncrono no mesmo gesto de clique
     const ctx = this.ensureContext();
-    if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
 
-    // Para fontes ativas anteriores
     this.stopAllSources();
     const requestId = ++this.playRequestId;
     const offset    = this.pauseOffset;
 
-    // Separa faixas por tipo de engine
+    // Separa faixas por mecanismo de execução
     const bufferTracks  = song.tracks.filter(t => t.audioBuffer && t.gainNode);
-    const elementTracks = song.tracks.filter(t => t.audioElement && !t.audioBuffer && t.gainNode);
+    const elementTracks = song.tracks.filter(t => t.audioElement && !t.audioBuffer);
 
-    // 2. Decode sob demanda para faixas remotas sem buffer e sem elemento (desktop remoto)
+    // 2. Decode sob demanda caso o Desktop acesse faixas remotas sem buffer
     const needDecode = song.tracks.filter(t => !t.audioBuffer && !t.audioElement && t.audioUrl);
     if (needDecode.length > 0) {
       this.isBuffering = true;
@@ -265,36 +319,13 @@ class AudioEngine {
       this.notifyListeners();
     }
 
-    // 3. Pre-buffer minimo para elementos <audio> mobile (nao bloqueante, max 1s)
+    // 3. MASTER CLOCK: Elege preferencialmente o click/guide
     const mobileActive = elementTracks.filter(t => !t.isMuted);
-    const needBuffer   = mobileActive.filter(t => t.audioElement!.readyState < 2);
-    if (needBuffer.length > 0) {
-      this.isBuffering = true;
-      this.notifyListeners();
-      await Promise.allSettled(
-        needBuffer.map(track => new Promise<void>(resolve => {
-          const el = track.audioElement!;
-          if (el.readyState >= 2) { resolve(); return; }
-          let done = false;
-          const settle = () => { if (!done) { done = true; resolve(); } };
-          el.addEventListener('canplay', settle, { once: true });
-          el.addEventListener('canplaythrough', settle, { once: true });
-          el.addEventListener('error', settle, { once: true });
-          if (el.readyState === 0) try { el.load(); } catch (_) {}
-          setTimeout(settle, 1000);
-        }))
-      );
-      if (this.playRequestId !== requestId) { this.isBuffering = false; this.notifyListeners(); return; }
-      this.isBuffering = false;
-      this.notifyListeners();
-    }
-
-    // 4. MASTER CLOCK
     const allReady = [...bufferTracks, ...mobileActive];
     const master   = allReady.find(t => t.isClickTrack || this.isClickOrGuideTrack(t)) ?? allReady[0] ?? null;
     this.masterClockTrackId = master?.trackId ?? null;
 
-    // 5a. DESKTOP: startTime absoluto +50ms — sincronia de nanosegundo
+    // 4. DESKTOP: Disparo via AudioBufferSourceNode (+50ms para nanossegundo de precisão)
     if (bufferTracks.length > 0) {
       const startTime = ctx.currentTime + 0.05;
       bufferTracks.forEach(track => {
@@ -309,8 +340,11 @@ class AudioEngine {
       this.absoluteStartTime = startTime - offset;
     }
 
-    // 5b. MOBILE: posiciona todos e dispara em conjunto via Promise.allSettled
+    // 5. MOBILE: Disparo DIRETO E IMEDIATO dos elementos <audio>
+    // SEM await ou setTimeout antes de play() para manter o User Gesture 100% ativo!
     if (elementTracks.length > 0) {
+      this.updateTrackGains(song);
+
       elementTracks.forEach(track => {
         const el = track.audioElement!;
         try {
@@ -320,15 +354,16 @@ class AudioEngine {
         } catch (_) {}
         el.playbackRate = 1.0;
       });
-      // Dispara todos no mesmo tick — catch isolado por faixa
-      Promise.allSettled(
-        mobileActive.map(track =>
-          track.audioElement!.play().catch(err =>
-            console.warn(`[AudioEngine] play() aviso "${track.trackName}":`, err)
-          )
-        )
-      );
-      // Se nao houver buffer tracks, usa currentTime do elemento como referencia
+
+      // Dispara imediatamente no mesmo tick da interação do usuário
+      mobileActive.forEach(track => {
+        const el = track.audioElement!;
+        const p = el.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(err => console.warn(`[AudioEngine] play() aviso "${track.trackName}":`, err));
+        }
+      });
+
       if (bufferTracks.length === 0) {
         this.absoluteStartTime = ctx.currentTime - offset;
       }
@@ -376,7 +411,7 @@ class AudioEngine {
 
     if (wasPlaying) {
       const ctx = this.ensureContext();
-      // Buffer tracks: re-agenda com novo startTime
+      // Desktop: re-agenda os nós de buffer
       const startTime = ctx.currentTime + 0.02;
       song.tracks.forEach(track => {
         if (track.audioBuffer && track.gainNode) {
@@ -387,11 +422,13 @@ class AudioEngine {
           src.start(startTime, t);
           track.sourceNode = src;
         }
-        // Element tracks: reposiciona e reinicia com velocidade normal
+        // Mobile: reposiciona e inicia com velocidade normal
         if (track.audioElement && !track.audioBuffer) {
           try { track.audioElement.currentTime = t; } catch (_) {}
           track.audioElement.playbackRate = 1.0;
-          if (!track.isMuted) track.audioElement.play().catch(() => {});
+          if (!track.isMuted) {
+            track.audioElement.play().catch(() => {});
+          }
         }
       });
       this.absoluteStartTime = startTime - t;
@@ -405,6 +442,7 @@ class AudioEngine {
 
   private stopAllSources(): void {
     const song = this.getCurrentSong();
+    this.clearAllFadeIntervals();
     if (!song) return;
     song.tracks.forEach(track => {
       if (track.sourceNode) {
@@ -421,10 +459,10 @@ class AudioEngine {
     });
   }
 
-  // ─── LOOP INTERNO ─────────────────────────────────────────────────────────────
+  // ─── LOOP DE TEMPO E SINCRONIZAÇÃO SUAVE ──────────────────────────────────────
 
   private startTimeUpdateLoop(): void {
-    let lastNotifyMs    = 0;
+    let lastNotifyMs = 0;
 
     const update = () => {
       if (!this.isPlaying) return;
@@ -435,11 +473,8 @@ class AudioEngine {
 
       const now = performance.now();
 
-      // ─── SINCRONIZAÇÃO SUAVE (DRIFT CORRECTION SEM ENGASGOS) ───────────────
-      // Verifica o desvio a cada 500ms (não a cada 200ms para permitir estabilização).
-      // NUNCA faz seek forçado (currentTime) para pequenas variações normais de mobile!
-      // Se a faixa estiver atrasada/adiantada entre 40ms e 350ms, ajusta o playbackRate em ±2.5%
-      // para alinhar de forma 100% contínua e sem NENHUM corte ou engasgo no som.
+      // Sincronização inteligente sem cortes (500ms throttle)
+      // Ajusta o playbackRate em ±2.5% para alinhar o áudio de forma 100% contínua
       if (now - this.lastSyncCheckTime > 500) {
         this.lastSyncCheckTime = now;
 
@@ -455,22 +490,15 @@ class AudioEngine {
           if (track.trackId === this.masterClockTrackId) return;
           const el = track.audioElement;
           if (el && !el.paused && !track.isMuted) {
-            const timeDiff = el.currentTime - masterTime; // positivo = adiantado, negativo = atrasado
+            const timeDiff = el.currentTime - masterTime;
             const absDiff = Math.abs(timeDiff);
 
             if (absDiff < 0.04) {
-              // Sincronia excelente (< 40ms) -> velocidade 1.0x normal
-              if (el.playbackRate !== 1.0) {
-                el.playbackRate = 1.0;
-              }
+              if (el.playbackRate !== 1.0) el.playbackRate = 1.0;
             } else if (absDiff <= 0.35) {
-              // Desvio leve/moderado (40ms a 350ms): ajusta playbackRate em ±2.5% SUAVEMENTE sem cortar som!
               const targetRate = timeDiff < 0 ? 1.025 : 0.975;
-              if (el.playbackRate !== targetRate) {
-                el.playbackRate = targetRate;
-              }
+              if (el.playbackRate !== targetRate) el.playbackRate = targetRate;
             } else {
-              // Desvio severo (> 350ms): apenas em atraso grave reposiciona
               el.playbackRate = 1.0;
               el.currentTime = masterTime;
             }
@@ -478,7 +506,7 @@ class AudioEngine {
         });
       }
 
-      // Notifica React a ~16fps (60ms) — nao sobrecarrega setState
+      // Notifica React a ~16fps (60ms) para não sobrecarregar setState
       if (now - lastNotifyMs >= 60) {
         lastNotifyMs = now;
         this.notifyPlayback();
@@ -498,7 +526,6 @@ class AudioEngine {
 
   getCurrentTime(): number {
     if (!this.isPlaying) return this.pauseOffset;
-    // Se estiver tocando via faixas <audio> (mobile), prioriza o relógio do elemento master
     if (this.masterClockTrackId) {
       const song = this.getCurrentSong();
       const masterTrack = song?.tracks.find(t => t.trackId === this.masterClockTrackId);
@@ -513,7 +540,7 @@ class AudioEngine {
 
   getIsPlaying(): boolean { return this.isPlaying; }
 
-  // ─── VOLUME / MUTE / SOLO / PAN ───────────────────────────────────────────────
+  // ─── CONTROLE DE VOLUME / MUTE / SOLO / PAN ───────────────────────────────────
 
   setTrackVolume(trackId: string, vol: number): void {
     const v = Math.max(0, Math.min(1, vol));
@@ -521,8 +548,7 @@ class AudioEngine {
       const track = song.tracks.find(t => t.trackId === trackId);
       if (track) {
         track.volume = v;
-        if (track.gainNode && !track.isMuted)
-          track.gainNode.gain.setValueAtTime(v, this.audioContext?.currentTime ?? 0);
+        this.updateTrackGains(song);
         this.notifyListeners();
         return;
       }
@@ -535,11 +561,6 @@ class AudioEngine {
       if (track) {
         track.isMuted = !track.isMuted;
         this.updateTrackGains(song);
-        // Para faixas element: pausa ou retoma conforme mute
-        if (track.audioElement && this.isPlaying) {
-          if (track.isMuted) track.audioElement.pause();
-          else track.audioElement.play().catch(() => {});
-        }
         this.notifyListeners();
         return track.isMuted;
       }
@@ -563,7 +584,12 @@ class AudioEngine {
   setTrackMute(trackId: string, muted: boolean): void {
     for (const song of this.songs.values()) {
       const track = song.tracks.find(t => t.trackId === trackId);
-      if (track) { track.isMuted = muted; this.updateTrackGains(song); this.notifyListeners(); return; }
+      if (track) {
+        track.isMuted = muted;
+        this.updateTrackGains(song);
+        this.notifyListeners();
+        return;
+      }
     }
   }
 
@@ -571,9 +597,17 @@ class AudioEngine {
     const hasSolo = song.tracks.some(t => t.isSoloed);
     const now = this.audioContext?.currentTime ?? 0;
     song.tracks.forEach(track => {
-      if (!track.gainNode) return;
       const vol = track.isMuted ? 0 : (hasSolo && !track.isSoloed ? 0 : track.volume);
-      track.gainNode.gain.setValueAtTime(vol, now);
+
+      // Web Audio (Desktop)
+      if (track.gainNode) {
+        track.gainNode.gain.setValueAtTime(vol, now);
+      }
+
+      // Áudio Nativo (Mobile)
+      if (track.audioElement) {
+        track.audioElement.volume = Math.max(0, Math.min(1, vol * this.masterVolume));
+      }
     });
   }
 
@@ -627,24 +661,43 @@ class AudioEngine {
     const song = this.getCurrentSong();
     if (!song) return;
     const ctx = this.audioContext;
-    if (!ctx) return;
-    const now = ctx.currentTime;
+    const now = ctx?.currentTime ?? 0;
+
     song.tracks.forEach(track => {
       if (this.isClickOrGuideTrack(track)) return;
-      if (!track.gainNode) return;
+
       if (fadeOut) {
         if (!this.instrumentsFaded) this.savedInstrumentVolumes.set(track.trackId, track.volume);
-        track.gainNode.gain.cancelScheduledValues(now);
-        track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, now);
-        track.gainNode.gain.linearRampToValueAtTime(0.0001, now + duration);
-        track.gainNode.gain.setValueAtTime(0, now + duration);
+
+        // Desktop
+        if (track.gainNode && ctx) {
+          track.gainNode.gain.cancelScheduledValues(now);
+          track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, now);
+          track.gainNode.gain.linearRampToValueAtTime(0.0001, now + duration);
+          track.gainNode.gain.setValueAtTime(0, now + duration);
+        }
+
+        // Mobile
+        if (track.audioElement) {
+          this.fadeAudioElement(track.audioElement, 0, duration);
+        }
       } else {
         const sv = this.savedInstrumentVolumes.get(track.trackId) ?? track.volume;
-        track.gainNode.gain.cancelScheduledValues(now);
-        track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, now);
-        track.gainNode.gain.linearRampToValueAtTime(sv, now + 1.0);
+
+        // Desktop
+        if (track.gainNode && ctx) {
+          track.gainNode.gain.cancelScheduledValues(now);
+          track.gainNode.gain.setValueAtTime(track.gainNode.gain.value, now);
+          track.gainNode.gain.linearRampToValueAtTime(sv, now + 1.0);
+        }
+
+        // Mobile
+        if (track.audioElement) {
+          this.fadeAudioElement(track.audioElement, sv * this.masterVolume, 1.0);
+        }
       }
     });
+
     this.instrumentsFaded = fadeOut;
     this.notifyListeners();
   }
@@ -653,10 +706,17 @@ class AudioEngine {
 
   setMasterVolume(volume: number): void {
     const v = Math.max(0, Math.min(1, volume));
-    if (this.masterGainNode) this.masterGainNode.gain.setValueAtTime(v, this.audioContext?.currentTime ?? 0);
+    this.masterVolume = v;
+    if (this.masterGainNode) {
+      this.masterGainNode.gain.setValueAtTime(v, this.audioContext?.currentTime ?? 0);
+    }
+    const song = this.getCurrentSong();
+    if (song) {
+      this.updateTrackGains(song);
+    }
   }
 
-  // ─── DECODE DE AUDIO ──────────────────────────────────────────────────────────
+  // ─── DECODE DE ÁUDIO (DESKTOP) ────────────────────────────────────────────────
 
   async decodeAudioData(ab: ArrayBuffer, trackName = 'Canal'): Promise<AudioBuffer | null> {
     try {
