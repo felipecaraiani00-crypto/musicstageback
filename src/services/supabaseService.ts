@@ -213,7 +213,7 @@ export async function loadSongFromSupabase(
       // O AudioEngine conecta o elemento via createMediaElementSource ao grafo Web Audio
       audioElement = new Audio();
       audioElement.crossOrigin = "anonymous";
-      audioElement.preload = "metadata";
+      audioElement.preload = "auto";
       audioElement.src = fileUrl;
     } else {
       // Desktop: baixa e decodifica para AudioBufferSourceNode (sincronia absoluta)

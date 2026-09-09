@@ -133,7 +133,7 @@ export async function importZipFile(
           audioEngine.registerObjectUrl(blobUrl);
 
           const audioElement = new Audio();
-          audioElement.preload = 'metadata';
+          audioElement.preload = 'auto';
           audioElement.src = blobUrl;
 
           // Lê a duração dos metadados de forma quase instantânea

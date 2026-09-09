@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // AudioEngine — Arquitetura Hibrida
 // Desktop  : AudioBufferSourceNode (sincronia absoluta via startTime)
 // Mobile   : HTMLAudioElement + createMediaElementSource (streaming sem OOM)
@@ -313,7 +313,12 @@ class AudioEngine {
     if (elementTracks.length > 0) {
       elementTracks.forEach(track => {
         const el = track.audioElement!;
-        try { el.currentTime = offset; } catch (_) {}
+        try {
+          if (Math.abs(el.currentTime - offset) > 0.05) {
+            el.currentTime = offset;
+          }
+        } catch (_) {}
+        el.playbackRate = 1.0;
       });
       // Dispara todos no mesmo tick — catch isolado por faixa
       Promise.allSettled(
@@ -382,9 +387,10 @@ class AudioEngine {
           src.start(startTime, t);
           track.sourceNode = src;
         }
-        // Element tracks: reposiciona e reinicia
+        // Element tracks: reposiciona e reinicia com velocidade normal
         if (track.audioElement && !track.audioBuffer) {
           try { track.audioElement.currentTime = t; } catch (_) {}
+          track.audioElement.playbackRate = 1.0;
           if (!track.isMuted) track.audioElement.play().catch(() => {});
         }
       });
@@ -407,7 +413,10 @@ class AudioEngine {
         track.sourceNode = null;
       }
       if (track.audioElement) {
-        try { track.audioElement.pause(); } catch (_) {}
+        try {
+          track.audioElement.pause();
+          track.audioElement.playbackRate = 1.0;
+        } catch (_) {}
       }
     });
   }
@@ -426,11 +435,14 @@ class AudioEngine {
 
       const now = performance.now();
 
-      // Drift correction para faixas <audio> mobile (200ms throttle, tolerancia 40ms)
-      if (now - this.lastSyncCheckTime > 200) {
+      // ─── SINCRONIZAÇÃO SUAVE (DRIFT CORRECTION SEM ENGASGOS) ───────────────
+      // Verifica o desvio a cada 500ms (não a cada 200ms para permitir estabilização).
+      // NUNCA faz seek forçado (currentTime) para pequenas variações normais de mobile!
+      // Se a faixa estiver atrasada/adiantada entre 40ms e 350ms, ajusta o playbackRate em ±2.5%
+      // para alinhar de forma 100% contínua e sem NENHUM corte ou engasgo no som.
+      if (now - this.lastSyncCheckTime > 500) {
         this.lastSyncCheckTime = now;
 
-        // Tempo de referencia: master clock ou AudioContext
         const masterTrack = this.masterClockTrackId
           ? song.tracks.find(t => t.trackId === this.masterClockTrackId)
           : null;
@@ -441,10 +453,26 @@ class AudioEngine {
 
         song.tracks.forEach(track => {
           if (track.trackId === this.masterClockTrackId) return;
-          if (track.audioElement && !track.audioElement.paused && !track.isMuted) {
-            const diff = Math.abs(track.audioElement.currentTime - masterTime);
-            if (diff > 0.04) {
-              track.audioElement.currentTime = masterTime;
+          const el = track.audioElement;
+          if (el && !el.paused && !track.isMuted) {
+            const timeDiff = el.currentTime - masterTime; // positivo = adiantado, negativo = atrasado
+            const absDiff = Math.abs(timeDiff);
+
+            if (absDiff < 0.04) {
+              // Sincronia excelente (< 40ms) -> velocidade 1.0x normal
+              if (el.playbackRate !== 1.0) {
+                el.playbackRate = 1.0;
+              }
+            } else if (absDiff <= 0.35) {
+              // Desvio leve/moderado (40ms a 350ms): ajusta playbackRate em ±2.5% SUAVEMENTE sem cortar som!
+              const targetRate = timeDiff < 0 ? 1.025 : 0.975;
+              if (el.playbackRate !== targetRate) {
+                el.playbackRate = targetRate;
+              }
+            } else {
+              // Desvio severo (> 350ms): apenas em atraso grave reposiciona
+              el.playbackRate = 1.0;
+              el.currentTime = masterTime;
             }
           }
         });
@@ -470,6 +498,14 @@ class AudioEngine {
 
   getCurrentTime(): number {
     if (!this.isPlaying) return this.pauseOffset;
+    // Se estiver tocando via faixas <audio> (mobile), prioriza o relógio do elemento master
+    if (this.masterClockTrackId) {
+      const song = this.getCurrentSong();
+      const masterTrack = song?.tracks.find(t => t.trackId === this.masterClockTrackId);
+      if (masterTrack?.audioElement && !masterTrack.audioElement.paused) {
+        return masterTrack.audioElement.currentTime;
+      }
+    }
     const ctx = this.audioContext;
     if (!ctx) return this.pauseOffset;
     return Math.max(0, ctx.currentTime - this.absoluteStartTime);
