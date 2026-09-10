@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, FileArchive, Music, X, Plus, Loader2, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { importZipFile, importAudioFiles, isAudioFile, ImportProgress } from "@/lib/zipImporter";
-import { Song, isMobileDevice } from "@/lib/audioEngine";
+import { Song } from "@/lib/audioEngine";
 
 interface ImportMusicProps {
   onImport: (songs: Song[]) => void;

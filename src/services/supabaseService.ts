@@ -3,7 +3,7 @@ import { Song } from "@/components/SongList";
 import { Section, getSectionColor } from "@/types/section";
 import { FaderTrack } from "@/components/HorizontalFaders";
 import { getTrackIcon, getTrackColor } from "@/lib/zipImporter";
-import { audioEngine, Track, Song as AudioSong, loadInBatches, isMobileDevice } from "@/lib/audioEngine";
+import { audioEngine, Track, Song as AudioSong, loadInBatches } from "@/lib/audioEngine";
 
 export interface SupabaseSong {
   id: string;
@@ -204,25 +204,6 @@ export async function loadSongFromSupabase(
       return null;
     }
 
-    const isMobile = isMobileDevice();
-    let audioBuffer: AudioBuffer | null = null;
-    let audioElement: HTMLAudioElement | null = null;
-
-    if (isMobile) {
-      // Mobile: cria <audio> para streaming gradual — sem decodificar o arquivo inteiro para RAM
-      // O AudioEngine conecta o elemento via createMediaElementSource ao grafo Web Audio
-      audioElement = new Audio();
-      audioElement.crossOrigin = "anonymous";
-      audioElement.preload = "auto";
-      audioElement.src = fileUrl;
-    } else {
-      // Desktop: baixa e decodifica para AudioBufferSourceNode (sincronia absoluta)
-      audioBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
-    }
-
-    completedCount++;
-    onProgress?.(completedCount, total);
-
     const isClick =
       t.is_click ??
       (trackName.toLowerCase().includes("click") ||
@@ -230,12 +211,21 @@ export async function loadSongFromSupabase(
         trackName.toLowerCase().includes("guide") ||
         trackName.toLowerCase().includes("metron"));
 
+    let rawBuffer = await audioEngine.fetchAndDecodeAudio(fileUrl, trackName);
+    let audioBuffer: AudioBuffer | null = null;
+    if (rawBuffer) {
+      audioBuffer = audioEngine.optimizeAudioBuffer(rawBuffer, isClick);
+    }
+
+    completedCount++;
+    onProgress?.(completedCount, total);
+
     const track: Track = {
       trackId: t.id || crypto.randomUUID(),
       trackName,
       audioBuffer,
       audioUrl: fileUrl,
-      audioElement,
+      audioElement: null,
       mediaElementSource: null,
       volume: typeof t.volume === "number" ? t.volume : 1.0,
       pan: typeof t.pan === "number" ? t.pan : 0,
